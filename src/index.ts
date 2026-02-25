@@ -131,7 +131,7 @@ const server = createServer(async (socket) => {
   const helloMessage = {
     type: "hello",
     version: "0.10.5",
-    agent: 'client-example'
+    agent: 'Scadrial'
   }
   const getPeersMessage = {
     type: "getpeers"

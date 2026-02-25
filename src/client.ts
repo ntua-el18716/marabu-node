@@ -2,7 +2,7 @@ import canonicalize from 'canonicalize'
 import { Socket } from 'net'
 
 const SERVER_PORT = 18018
-const SERVER_HOST = '0.0.0.0'
+const SERVER_HOST = '95.179.149.49'
 
 const client = new Socket()
 client.connect(SERVER_PORT, SERVER_HOST, () => {
