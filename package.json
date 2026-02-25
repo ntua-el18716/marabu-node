@@ -1,0 +1,21 @@
+{
+  "name": "workshop-2",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev:server": "bun --hot src/index.ts",
+    "dev:client": "bun --hot src/client.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^25.3.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "canonicalize": "^2.1.0",
+    "zod": "^4.3.6"
+  }
+}
