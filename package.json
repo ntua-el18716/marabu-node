@@ -1,5 +1,5 @@
 {
-  "name": "workshop-2",
+  "name": "marabu-node",
   "module": "index.ts",
   "type": "module",
   "private": true,
