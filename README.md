@@ -1,4 +1,4 @@
-# workshop-2
+# Blockchain Foundations - Marabu
 
 To install dependencies:
 
