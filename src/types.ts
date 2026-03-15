@@ -54,28 +54,64 @@ export const IHaveObjectSchema = z.object({
 })
 
 // Object
+
+// Transaction Object
+const TxInputSchema = z.object({
+  outpoint: z.object({
+    txid: z.string().regex(/^[0-9a-f]{64}$/),
+    index: z.int().min(0)
+  }),
+  sig: z.union([z.string().regex(/^[0-9a-f]{128}$/), z.null()])
+})
+
+const TxOutputSchema = z
+  .object({
+    pubkey: z.string().regex(/^[0-9a-f]{64}$/),
+    value: z.int().min(0)
+  })
+
+
+const CoinbaseTxSchema = z.object({
+  type: z.literal('transaction'),
+  height: z.int().min(0),
+  outputs: z.array(TxOutputSchema)
+})
+
+const NormalTxSchema = z.object({
+  type: z.literal('transaction'),
+  inputs: z.array(TxInputSchema).min(1),
+  outputs: z.array(TxOutputSchema)
+})
+
+const TransactionSchema = z.union([NormalTxSchema, CoinbaseTxSchema]);
+
+// Block Object
+const BlockSchema = z.object({
+  type: z.literal("block"),
+  T: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/),
+  created: z.int(),
+  miner: z.string().max(128).optional(),
+  nonce: z
+    .string()
+    .regex(/^[0-9a-f]{1,64}$/),
+  note: z.string().max(128).optional(),
+  previd: z.union(
+    [z
+      .string()
+      .regex(/^[0-9a-f]{64}$/), z.null()
+    ]),
+  txids: z.array(
+    z
+      .string()
+      .regex(/^[0-9a-f]{64}$/),
+  )
+})
+
 export const ObjectSchema = z.object({
   type: z.literal('object'),
-  object: z.object({
-    type: z.literal("block"),
-    T: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/),
-    created: z.int(),
-    miner: z.string().max(128).optional(),
-    nonce: z
-      .string()
-      .regex(/^[0-9a-f]{1,64}$/),
-    note: z.string().max(128).optional(),
-    previd: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/),
-    txids: z.array(
-      z
-        .string()
-        .regex(/^[0-9a-f]{64}$/),
-    )
-  })
+  object: z.union([BlockSchema, TransactionSchema])
 })
 
 // GetMempool
@@ -110,3 +146,6 @@ export const MessageSchema = z.discriminatedUnion('type', [
   HelloMessageSchema, ErrorMessageSchema, GetPeersMessageSchema, PeersMessageSchema, GetObjectMessageSchema, IHaveObjectSchema, ObjectSchema,
   GetMempoolSchema, MempoolSchema, GetChainTipSchema, ChainTipSchema
 ])
+
+type ObjectMessage = z.infer<typeof ObjectSchema>
+export type ObjectItem = ObjectMessage["object"]
