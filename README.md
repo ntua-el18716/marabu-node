@@ -1,15 +1,40 @@
-# Blockchain Foundations - Marabu
+# Blockchain Foundations (In progress - PSET 2)
 
-To install dependencies:
+This repository contains my implementation work for the **Blockchain Foundations** class, aiming on the implementation of a blockchain node from scratch.
+
+Course page: https://www.marabu.dev/
+
+## About the class
+
+Blockchain Foundations is a graduate course taught at NTUA (Spring 2026) and focuses on the theory behind blockchains and how to implement them in practice. 
+
+## PSETS
+
+### PSET1 – Networking & Peer Discovery
+
+- Implemented the TCP networking layer of a Marabu node
+- Implemented protocol handshake (hello) and message validation
+- Supported peer discovery (getpeers / peers)
+- Deployed a publicly reachable node on a VPS
+
+### PSET2 – Object Exchange & Transaction Validation
+
+PSET2 – Persistent Storage
+
+- Integrated LevelDB for persistent storage of objects(transcactions, blocks)
+- Implemented object validation according to the Marabu protocol rules
+- Enabled peers to request and exchange transactions and blocks
+
+## Run the project
+
+Install dependencies:
 
 ```bash
 bun install
 ```
 
-To run:
+Start node server:
 
 ```bash
-bun run index.ts
+bun run dev:server
 ```
-
-This project was created using `bun init` in bun v1.2.13. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.

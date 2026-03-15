@@ -2,7 +2,8 @@ import canonicalize from "canonicalize";
 import { Socket } from "net";
 import * as forge from 'node-forge';
 
-const SERVER_HOST = "127.0.0.1";
+// const SERVER_HOST = "127.0.0.1";
+const SERVER_HOST = '95.179.149.49'
 const SERVER_PORT = 18018;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -185,14 +186,14 @@ const coinbaseTxMessage = {
 
 const TEST_MESSAGES: unknown[] = [
   // getPeersMessage,
-  // peersMessage,
+  peersMessage,
   // iHaveObjectMessage,
   // getObjectMessage,
   // blockObjectMessage,
   // coinbaseTxMessage
   // unknownObjectTxMessage,
   // invalidTxOutpointObjectMessage
-  invalidTxSigObjectMessage,
+  // invalidTxSigObjectMessage,
   // invalidTxConservationObjectMessage
 
 ];
