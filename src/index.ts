@@ -8,6 +8,8 @@ import { ObjectItem } from './types';
 import { knownObjectsDb } from './db';
 import { blake2s } from "hash-wasm";
 import canonicalize from 'canonicalize';
+import { PendingBlock } from './pendingBlock';
+import { objectManager } from './object'
 
 const PORT = 18018;
 
@@ -15,7 +17,9 @@ const PORT = 18018;
 const BOOTSTRAPPING_PEERS = ['95.179.158.137:18018', '95.179.132.22:18018', '45.32.235.245:18018'];
 
 let knownPeers = new Set<string>();
-
+export let pendingBlocks: Map<string, PendingBlock> = new Map();
+// txId -> BlockId[]
+export let txOfPendingBlock: Map<string, string[]> = new Map();
 for (const p of await loadPeers())
   knownPeers.add(p);
 if (knownPeers.size === 0) {

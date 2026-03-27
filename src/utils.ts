@@ -1,15 +1,18 @@
 import { Peer } from "./peer";
 import canonicalize from 'canonicalize';
 import { Socket } from "net";
-import { MessageSchema } from "./types";
+import { MessageSchema, CoinbaseTxSchema } from "./types";
 import { savePeers } from "./peerStore";
 import { blake2s } from "hash-wasm";
 import { Level } from "level";
 import { knownObjectsDb } from "./db";
-import type { ObjectItem } from './types'
+import type { ObjectItem, ObjectSchemaType, TxInputSchemaType, TxOutputSchemaType } from './types'
 import { error } from "console";
 import * as forge from 'node-forge';
-// var forge = require('node-forge');
+import { Block } from "./block";
+import { objectManager } from './object'
+import { utxoSets } from "./utxo";
+
 
 var ed25519 = forge.pki.ed25519;
 
@@ -106,7 +109,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
         }
       } catch (_) {
         console.error(`Unknown protocol message`, message)
-        socket.write(canonicalize(errorMessage('INVALID_FORMAT', 'Received Invalid Protocol Mesage')) + '\n')
+        socket.write(canonicalize(errorMessage('INVALID_FORMAT', 'Received Invalid Protocol Message')) + '\n')
         connectedPeers.delete(connectionId)
         socket.end()
         return;
@@ -136,16 +139,11 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
 export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, ObjectItem>, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
   let canonicalizedObject = canonicalize(object);
   let hash = await blake2s(canonicalizedObject!);
-  console.log('handling obj1')
-  console.log('hash: ' + hash)
   const existingObject = await knownObjectsDb.get(hash);
   if (existingObject !== undefined) {
-    console.log('handling obj3')
     return
   }
-
-  console.log('handling obj2')
-  if (await validationTx(object, socket))
+  if (await validationTx(object, hash, connectedPeers, socket))
     await knownObjectsDb.put(hash, object);
   else
     return;
@@ -176,7 +174,6 @@ export const handleGetObject = async (hash: string, socket: Socket) => {
 }
 
 export const handleIHaveObject = async (hash: string, socket: Socket) => {
-  console.log("WEareInside")
   const obj = await knownObjectsDb.get(hash);
   if (obj !== undefined) {
     await knownObjectsDb.put(hash, obj);
@@ -190,7 +187,7 @@ export const handleIHaveObject = async (hash: string, socket: Socket) => {
   socket.write(canonicalize(getObjectMessage) + '\n')
 }
 
-const validationTx = async (object: ObjectItem, socket: Socket): Promise<boolean> => {
+const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
   if (object.type === "transaction" && "inputs" in object) {
     let tx_without_sig = structuredClone(object);
     tx_without_sig.inputs.forEach(input => {
@@ -248,5 +245,89 @@ const validationTx = async (object: ObjectItem, socket: Socket): Promise<boolean
     }
     return true;
   }
+  else if (object.type === 'block') {
+    const block = new Block(object, hash);
+
+    if (!block.hasValidPoW()) {
+      // if (block.hasValidPoW()) {
+      socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
+      return false;
+    }
+
+    const sendGetObject = (objectid: string) => {
+      const getObjectMessage = {
+        type: 'getobject',
+        objectid
+      }
+      const canonicalizedGetObjectMessage = canonicalize(getObjectMessage);
+      connectedPeers.forEach((value, key) => {
+        if (value.peer.validHandshake)
+          value.socket.write(canonicalizedGetObjectMessage! + '\n');
+      })
+    }
+
+    const promises = block.txids.map(txid => objectManager.findObject(txid, sendGetObject));
+
+    try {
+      await Promise.all(promises);
+    } catch {
+      socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
+      return false;
+    }
+    utxoSets.set(block.blockid, block.getParentUtxo());
+    // txs are valid if they are in the database
+    let coinbaseExists = false;
+    let fees = 0;
+    for (const [index, txid] of block.txids.entries()) {
+      const tx = await knownObjectsDb.get(txid);
+      if (tx.type === "transaction" && "inputs" in tx) {
+        fees += await calculateTxFees(tx.inputs, tx.outputs);
+        if (utxoSets.get(block.blockid)?.checkInputsCorrespondToOutpoints(tx.inputs)) {
+          utxoSets.get(block.blockid)?.applyTx(txid, tx.inputs, tx.outputs);
+          continue;
+        }
+        else
+          socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Input not found in the UTXO')) + '\n');
+      }
+      else if (tx.type === "transaction" && !("inputs" in tx)) {
+        // Coinbase Transaction
+        if (index !== 0) {
+          socket.write(canonicalize(errorMessage('INVALID_BLOCK_COINBASE', 'There can only be one Coinbase Transaction at index 0')) + '\n');
+        }
+        coinbaseExists = true;
+      }
+    }
+    if (coinbaseExists) {
+      const coinbaseTxValidation = await validateCoinbaseTx(block.txids.at(0)!, fees);
+      if (coinbaseTxValidation !== "SUCCESS")
+        socket.write(canonicalize(errorMessage(coinbaseTxValidation, 'Coinbase Tx has a max value of fees + reward')) + '\n');
+    }
+  }
   return true;
+}
+
+const validateCoinbaseTx = async (txid: string, fees: number) => {
+  const coinbaseTx = await knownObjectsDb.get(txid);
+  const result = CoinbaseTxSchema.safeParse(coinbaseTx);
+  if (!result.success) {
+    return "INVALID_FORMAT";
+  }
+  if (coinbaseTx.type == "transaction") {
+    if (coinbaseTx.outputs.at(0)?.value! > fees + 50 * 10 ** 12)
+      return "INVALID_BLOCK_COINBASE"
+  }
+  return "SUCCESS";
+}
+
+const calculateTxFees = async (txInputs: TxInputSchemaType[], txOutputs: TxOutputSchemaType[]) => {
+  let inputSum = 0, outputSum = 0;
+  for (const input of txInputs) {
+    const tx = await knownObjectsDb.get(input.outpoint.txid);
+    if (tx.type == "transaction")
+      inputSum += tx.outputs.at(input.outpoint.index)?.value!;
+  }
+  for (const output of txOutputs) {
+    outputSum += output.value;
+  }
+  return inputSum - outputSum;
 }

@@ -71,10 +71,10 @@ const TxOutputSchema = z
   })
 
 
-const CoinbaseTxSchema = z.object({
+export const CoinbaseTxSchema = z.object({
   type: z.literal('transaction'),
   height: z.int().min(0),
-  outputs: z.array(TxOutputSchema)
+  outputs: z.array(TxOutputSchema).max(1)
 })
 
 const NormalTxSchema = z.object({
@@ -88,25 +88,28 @@ const TransactionSchema = z.union([NormalTxSchema, CoinbaseTxSchema]);
 // Block Object
 const BlockSchema = z.object({
   type: z.literal("block"),
-  T: z
-    .string()
-    .regex(/^[0-9a-f]{64}$/),
+  T: z.literal("00000000abc00000000000000000000000000000000000000000000000000000"),
+  // T: z
+  //   .string()
+  //   .regex(/^[0-9a-f]{64}$/),
   created: z.int(),
-  miner: z.string().max(128).optional(),
+  miner: z.string().max(128).min(1).optional(),
   nonce: z
     .string()
     .regex(/^[0-9a-f]{1,64}$/),
-  note: z.string().max(128).optional(),
-  previd: z.union(
-    [z
-      .string()
-      .regex(/^[0-9a-f]{64}$/), z.null()
-    ]),
+  note: z.string().max(128).optional().nullable(),
+  previd: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable(),
   txids: z.array(
     z
       .string()
       .regex(/^[0-9a-f]{64}$/),
-  )
+  ),
+  studentids: z.array(
+    z.string().regex(/^[\x20-\x7E]*$/).max(128).max(128)
+  ).max(10).optional()
 })
 
 export const ObjectSchema = z.object({
@@ -149,3 +152,7 @@ export const MessageSchema = z.discriminatedUnion('type', [
 
 type ObjectMessage = z.infer<typeof ObjectSchema>
 export type ObjectItem = ObjectMessage["object"]
+export type BlockSchemaType = z.infer<typeof BlockSchema>
+export type ObjectSchemaType = z.infer<typeof ObjectSchema>
+export type TxInputSchemaType = z.infer<typeof TxInputSchema>
+export type TxOutputSchemaType = z.infer<typeof TxOutputSchema>

@@ -2,8 +2,8 @@ import canonicalize from "canonicalize";
 import { Socket } from "net";
 import * as forge from 'node-forge';
 
-// const SERVER_HOST = "127.0.0.1";
-const SERVER_HOST = '95.179.149.49'
+const SERVER_HOST = "127.0.0.1";
+// const SERVER_HOST = '95.179.149.49'
 const SERVER_PORT = 18018;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,7 +18,7 @@ function send(socket: Socket, obj: unknown) {
 const helloMessage = {
   type: "hello",
   version: "0.10.5",
-  agent: "test-client",
+  agent: "Roshar",
 };
 
 const getPeersMessage = {
@@ -49,13 +49,13 @@ const blockObjectMessage = {
   object: {
     type: "block",
     T: "00000000abc00000000000000000000000000000000000000000000000000000",
-    created: 1671148800,
+    created: 1772028037,
     miner: "Marabu Bounty Hunter",
-    nonce: "15551b5116783ace79cf19d95cca707a94f48e4cc69f3db32f41081dab3e6641",
+    nonce: "b067391b9caf9821861e83cfc4d4656150ff2f1f800dbf37bdc76d211e76bf86",
     note: "First block on genesis, 50 bu reward",
     previd: "00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6",
     txids: [
-      "8265faf623dfbcb17528fcd2e67fdf78de791ed4c7c60480e8cd21c6cdc8bcd4",
+      "f0769c4452aec5979016ca16675e9cff0c602be973a365d4e951df6fb678624a",
     ],
   },
 };
@@ -176,20 +176,20 @@ const coinbaseTxMessage = {
     type: "transaction",
     outputs: [
       {
-        pubkey: "df5cc53cdad7639a887d95c421b34c8eaf4ac34907fead908b7312071b7ae2fd",
-        value: 3,
+        pubkey: "b6a95d7b410ae1eb924898ae584d21523b53aa5a78d1bc54abe964fd8e63f487",
+        value: 50000000000000,
       },
     ],
-    height: 4,
+    height: 1,
   },
 };
 
 const TEST_MESSAGES: unknown[] = [
   // getPeersMessage,
-  peersMessage,
+  // peersMessage,
   // iHaveObjectMessage,
   // getObjectMessage,
-  // blockObjectMessage,
+  blockObjectMessage,
   // coinbaseTxMessage
   // unknownObjectTxMessage,
   // invalidTxOutpointObjectMessage
