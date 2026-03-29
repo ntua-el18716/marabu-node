@@ -44,7 +44,7 @@ export class Block {
     if (this.previd === GENESIS_BLOCK_ID || !this.previd) {
       return new UTXOSet(new Set())
     } else {
-      return utxoSets.get(this.previd)!
+      return new UTXOSet(utxoSets.get(this.previd)!.outpoints)
     }
   }
 

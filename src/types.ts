@@ -112,9 +112,11 @@ const BlockSchema = z.object({
   ).max(10).optional()
 })
 
+const ObjectUnwrappedSchema = z.union([BlockSchema, TransactionSchema]);
+
 export const ObjectSchema = z.object({
   type: z.literal('object'),
-  object: z.union([BlockSchema, TransactionSchema])
+  object: ObjectUnwrappedSchema
 })
 
 // GetMempool
@@ -154,5 +156,6 @@ type ObjectMessage = z.infer<typeof ObjectSchema>
 export type ObjectItem = ObjectMessage["object"]
 export type BlockSchemaType = z.infer<typeof BlockSchema>
 export type ObjectSchemaType = z.infer<typeof ObjectSchema>
+export type ObjectSchemaUnwrappedType = z.infer<typeof ObjectUnwrappedSchema>
 export type TxInputSchemaType = z.infer<typeof TxInputSchema>
 export type TxOutputSchemaType = z.infer<typeof TxOutputSchema>

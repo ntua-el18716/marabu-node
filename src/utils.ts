@@ -105,7 +105,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
           await handleIHaveObject(message.objectid, socket);
         }
         else if (message.type == "object") {
-          await handleObject(message.object, knownObjectsDb, socket, connectedPeers)
+          handleObject(message.object, knownObjectsDb, socket, connectedPeers)
         }
       } catch (_) {
         console.error(`Unknown protocol message`, message)
@@ -139,14 +139,34 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
 export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, ObjectItem>, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
   let canonicalizedObject = canonicalize(object);
   let hash = await blake2s(canonicalizedObject!);
+  console.log("received object with hash", hash);
   const existingObject = await knownObjectsDb.get(hash);
   if (existingObject !== undefined) {
     return
   }
-  if (await validationTx(object, hash, connectedPeers, socket))
-    await knownObjectsDb.put(hash, object);
-  else
-    return;
+  let isValid = false;
+
+  if (object.type === 'block') {
+    isValid = await validateBlock(object, hash, connectedPeers, socket);
+  }
+  else if (object.type === "transaction") {
+    // else if (object.type === "transaction" && "inputs" in object) {
+    isValid = await validationTx(object, hash, connectedPeers, socket);
+  }
+
+  if (isValid) {
+    // await knownObjectsDb.put(hash, object);
+    await objectManager.put(object);
+    console.log("!! Object stored successfully");
+  }
+  else {
+    await knownObjectsDb.del(hash)
+  }
+
+  // else if (object.type === "transaction" && "height" in object) {
+  //   await validateCoinbaseTx;
+  // }
+
   const iHaveObjectMessage = {
     type: "ihaveobject",
     objectid: hash
@@ -163,7 +183,6 @@ export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<str
 export const handleGetObject = async (hash: string, socket: Socket) => {
   const obj = await knownObjectsDb.get(hash);
   if (obj !== undefined) {
-    console.log(obj)
     const objectMessage = {
       type: "object",
       object: obj
@@ -186,7 +205,6 @@ export const handleIHaveObject = async (hash: string, socket: Socket) => {
   }
   socket.write(canonicalize(getObjectMessage) + '\n')
 }
-
 const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
   if (object.type === "transaction" && "inputs" in object) {
     let tx_without_sig = structuredClone(object);
@@ -207,7 +225,6 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
           socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Outpoint transaction incorrect')) + '\n');
           return false;
         }
-        console.log('PUBKEY' + prev_tx.outputs.at(0)?.pubkey)
         // Signature Verification
         if (!input.sig) {
           socket.write(canonicalize(errorMessage('INVALID_TX_SIGNATURE', 'Signature not valid')) + '\n');
@@ -244,8 +261,11 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
       return false;
     }
     return true;
-  }
-  else if (object.type === 'block') {
+  } return true;
+}
+
+const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
+  if (object.type === 'block') {
     const block = new Block(object, hash);
 
     if (!block.hasValidPoW()) {
@@ -260,17 +280,20 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
         objectid
       }
       const canonicalizedGetObjectMessage = canonicalize(getObjectMessage);
-      connectedPeers.forEach((value, key) => {
-        if (value.peer.validHandshake)
-          value.socket.write(canonicalizedGetObjectMessage! + '\n');
-      })
+      // connectedPeers.forEach((value, key) => {
+      //   if (value.peer.validHandshake)
+      //     value.socket.write(canonicalizedGetObjectMessage! + '\n');
+      // })
+      socket.write(canonicalizedGetObjectMessage! + '\n');
     }
 
     const promises = block.txids.map(txid => objectManager.findObject(txid, sendGetObject));
 
     try {
       await Promise.all(promises);
-    } catch {
+      console.log("Promises were resolved - SUCCESS")
+    } catch (error) {
+      console.log(`Failed to resolve depedencies ${error}`)
       socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
       return false;
     }
@@ -286,25 +309,34 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
           utxoSets.get(block.blockid)?.applyTx(txid, tx.inputs, tx.outputs);
           continue;
         }
-        else
+        else {
           socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Input not found in the UTXO')) + '\n');
+          return false;
+        }
       }
-      else if (tx.type === "transaction" && !("inputs" in tx)) {
-        // Coinbase Transaction
+      else if (tx.type === "transaction" && !("inputs" in tx)) {        // Coinbase Transaction
         if (index !== 0) {
           socket.write(canonicalize(errorMessage('INVALID_BLOCK_COINBASE', 'There can only be one Coinbase Transaction at index 0')) + '\n');
+          return false;
         }
         coinbaseExists = true;
       }
     }
     if (coinbaseExists) {
+      const coinbaseTx = await knownObjectsDb.get(block.txids.at(0)!);
+      if (coinbaseTx.type !== "transaction")
+        throw error;
       const coinbaseTxValidation = await validateCoinbaseTx(block.txids.at(0)!, fees);
-      if (coinbaseTxValidation !== "SUCCESS")
+      if (coinbaseTxValidation !== "SUCCESS") {
         socket.write(canonicalize(errorMessage(coinbaseTxValidation, 'Coinbase Tx has a max value of fees + reward')) + '\n');
+        return false;
+      }
+      utxoSets.get(block.blockid)?.applyCoinbaseTx(block.txids.at(0)!, coinbaseTx.outputs);
     }
   }
   return true;
 }
+
 
 const validateCoinbaseTx = async (txid: string, fees: number) => {
   const coinbaseTx = await knownObjectsDb.get(txid);

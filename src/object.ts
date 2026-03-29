@@ -1,19 +1,20 @@
 import canonicalize from 'canonicalize'
-import { ObjectSchemaType } from './types'
+import { ObjectSchemaUnwrappedType } from './types'
 import { blake2s } from 'hash-wasm'
 import { knownObjectsDb } from './db'
+import { sleep } from './client2'
 
 const FIND_TIMEOUT_MS = 5000
 
 interface PendingWaiter {
-  resolve: (object: ObjectSchemaType) => void
+  resolve: (object: ObjectSchemaUnwrappedType) => void
   reject: (error: Error) => void
 }
 
 class ObjectManager {
   pendingFinds: Map<string, PendingWaiter[]> = new Map()
 
-  id(object: ObjectSchemaType): Promise<string> {
+  id(object: ObjectSchemaUnwrappedType): Promise<string> {
     const canonicalized = canonicalize(object)
     if (canonicalized === undefined) {
       throw new Error('Failed to canonicalize object')
@@ -22,57 +23,89 @@ class ObjectManager {
   }
 
   async exists(id: string): Promise<boolean> {
-    return await knownObjectsDb.has(id)
+    return knownObjectsDb.has(id)
   }
 
-  async get(id: string): Promise<ObjectSchemaType> {
+  async get(id: string): Promise<ObjectSchemaUnwrappedType> {
     const object = await knownObjectsDb.get(id)
     if (object === undefined) {
       throw new Error(`Object ${id} not found`)
     }
-    return object as unknown as ObjectSchemaType
+    return object
   }
 
-  async put(object: ObjectSchemaType): Promise<string> {
+  async put(object: ObjectSchemaUnwrappedType): Promise<string> {
     const objectId = await this.id(object)
-    await knownObjectsDb.put(objectId, object as any)
+    await knownObjectsDb.put(objectId, object)
 
     const waiters = this.pendingFinds.get(objectId)
+    // console.log("PENDING", this.pendingFinds.get(objectId))
+    await sleep(150);
     if (waiters) {
+      this.pendingFinds.delete(objectId)
       for (const waiter of waiters) {
+        console.log("WAITER", waiter)
+
         waiter.resolve(object)
       }
-      this.pendingFinds.delete(objectId)
     }
 
     return objectId
   }
 
-  async findObject(objectId: string, sendGetObject: (id: string) => void): Promise<ObjectSchemaType> {
+  async findObject(
+    objectId: string,
+    sendGetObject: (id: string) => void
+  ): Promise<ObjectSchemaUnwrappedType> {
     try {
       return await this.get(objectId)
     } catch { }
 
-    sendGetObject(objectId)
-
-    const waitPromise = new Promise<ObjectSchemaType>((resolve) => {
+    return new Promise<ObjectSchemaUnwrappedType>((resolve, reject) => {
       const existing = this.pendingFinds.get(objectId)
-      if (existing) {
-        existing.push({ resolve, reject: () => { } })
-      } else {
-        this.pendingFinds.set(objectId, [{ resolve, reject: () => { } }])
+      const isFirstWaiter = !existing
+
+      let settled = false
+
+      const waiter: PendingWaiter = {
+        resolve: (object) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          resolve(object)
+        },
+        reject: (error) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          reject(error)
+        },
       }
 
-    })
+      if (existing) {
+        existing.push(waiter)
 
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        this.pendingFinds.delete(objectId)
-        reject(new Error(`Timeout waiting for object ${objectId}`))
+      } else {
+        this.pendingFinds.set(objectId, [waiter])
+      }
+
+      const timer = setTimeout(() => {
+        const current = this.pendingFinds.get(objectId)
+        if (current) {
+          const filtered = current.filter(w => w !== waiter)
+          if (filtered.length > 0) {
+            this.pendingFinds.set(objectId, filtered)
+          } else {
+            this.pendingFinds.delete(objectId)
+          }
+        }
+        waiter.reject(new Error(`Timeout waiting for object ${objectId}`))
       }, FIND_TIMEOUT_MS)
-    })
 
-    return Promise.race([waitPromise, timeoutPromise])
+      if (isFirstWaiter) {
+        sendGetObject(objectId)
+      }
+    })
   }
 }
 

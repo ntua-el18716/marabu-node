@@ -1,9 +1,10 @@
 import canonicalize from "canonicalize";
+import { blake2s } from "hash-wasm";
 import { Socket } from "net";
 import * as forge from 'node-forge';
 
-const SERVER_HOST = "127.0.0.1";
-// const SERVER_HOST = '95.179.149.49'
+// const SERVER_HOST = "127.0.0.1";
+const SERVER_HOST = '95.179.149.49'
 const SERVER_PORT = 18018;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,10 +40,10 @@ const iHaveObjectMessage = {
   objectid: "46ffd1eb5def1663c50303288206d8f418939415d45286c21cf07bbf76cb3d05",
 };
 
-const getObjectMessage = {
-  type: "getobject",
-  objectid: "c5a4642e7d10dc2e8fec2eaa7e73264ea3eed5eebbb498f3cacdc9d710a6eef5",
-};
+// const getObjectMessage = {
+//   type: "getobject",
+//   objectid: canonicalize(blockObjectMessage),
+// };
 
 const blockObjectMessage = {
   type: "object",
@@ -50,15 +51,33 @@ const blockObjectMessage = {
     type: "block",
     T: "00000000abc00000000000000000000000000000000000000000000000000000",
     created: 1772028037,
-    miner: "Marabu Bounty Hunter",
+    miner: "kalaburi",
     nonce: "b067391b9caf9821861e83cfc4d4656150ff2f1f800dbf37bdc76d211e76bf86",
-    note: "First block on genesis, 50 bu reward",
     previd: "00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6",
     txids: [
       "f0769c4452aec5979016ca16675e9cff0c602be973a365d4e951df6fb678624a",
     ],
   },
 };
+const getObjectMessage = {
+  type: "getobject",
+  objectid: "0000000096e9a9cb60ef3efe92133656557fad1f929e7bb9300a548d7be30924",
+};
+// const blockObjectMessage = {
+//   type: "object",
+//   object: {
+//     type: "block",
+//     T: "00000000abc00000000000000000000000000000000000000000000000000000",
+//     created: 1772028037,
+//     miner: "Marabu Bounty Hunter",
+//     nonce: "b067391b9caf9821861e83cfc4d4656150ff2f1f800dbf37bdc76d211e76bf86",
+//     note: "First block on genesis, 50 bu reward",
+//     previd: "00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6",
+//     txids: [
+//       "f0769c4452aec5979016ca16675e9cff0c602be973a365d4e951df6fb678624a",
+//     ],
+//   },
+// };
 
 const unknownObjectTxMessage = {
   type: "object",
@@ -188,7 +207,7 @@ const TEST_MESSAGES: unknown[] = [
   // getPeersMessage,
   // peersMessage,
   // iHaveObjectMessage,
-  // getObjectMessage,
+  getObjectMessage,
   blockObjectMessage,
   // coinbaseTxMessage
   // unknownObjectTxMessage,

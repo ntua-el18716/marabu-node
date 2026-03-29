@@ -1,8 +1,5 @@
-import { Block } from "./block"
 import { TxInputSchemaType } from "./types";
 import { TxOutputSchemaType } from "./types";
-
-const GENESIS_BLOCK_ID = "00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6"
 
 export class UTXOSet {
   outpoints: Set<string>
@@ -24,10 +21,18 @@ export class UTXOSet {
       this.outpoints.add(o);
     }
   }
+  applyCoinbaseTx(txid: string, outputs: TxOutputSchemaType[]) {
+    console.log("outpointsAAA"), utxoSets.get("000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab");
+    for (const [index, output] of outputs.entries()) {
+      const o = txid + ':' + index;
+      this.outpoints.add(o);
+    }
+  }
   checkInputsCorrespondToOutpoints(txInputs: TxInputSchemaType[]) {
     let unspentInputs = new Set(this.outpoints);
     for (const input of txInputs) {
       const stringInput = input.outpoint.txid + ':' + input.outpoint.index;
+      // console.log(stringInput);
       if (unspentInputs.has(stringInput)) {
         unspentInputs.delete(stringInput);
         continue;
