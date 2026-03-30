@@ -44,7 +44,7 @@ await run();
 
 const client = new Socket()
 // load peers
-const peer_to_connect = knownPeers.values().next().value!;
+const peer_to_connect = Array.from(knownPeers).find((peer) => !peer.startsWith('0.0.0.0:')) ?? BOOTSTRAPPING_PEERS[0]!;
 const index = peer_to_connect.lastIndexOf(':');
 const PEER_PORT = peer_to_connect.slice(index + 1)
 const PEER_ADDRESS = peer_to_connect.slice(0, index)
