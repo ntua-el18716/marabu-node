@@ -18,7 +18,6 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1",
     "canonicalize": "^2.1.0",
     "hash-wasm": "^4.12.0",
     "level": "^10.0.0",
