@@ -280,9 +280,9 @@ async function main() {
 
     // await send(client, getPeersMessage);
 
-    await send(client, genesisBlockMessage)
+    // await send(client, genesisBlockMessage)
+    // await send(client, getObjectMessageFunc('00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6'))
 
-    // await send(client, getObjectMessage)
 
     // await send(client, blockWithUnknownCoinbaseTxMessage)
     // await sleep(500)

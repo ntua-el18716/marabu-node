@@ -2,9 +2,9 @@ import canonicalize from 'canonicalize'
 import { ObjectSchemaUnwrappedType } from './types'
 import { blake2s } from 'hash-wasm'
 import { knownObjectsDb } from './db'
-import { sleep } from './client2'
 
 const FIND_TIMEOUT_MS = 5000
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 interface PendingWaiter {
   resolve: (object: ObjectSchemaUnwrappedType) => void
