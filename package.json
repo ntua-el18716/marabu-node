@@ -6,7 +6,7 @@
   "scripts": {
     "dev:server": "bun --hot src/index.ts",
     "dev:client": "bun --hot src/client.ts",
-    "dev:client2": "bun --hot src/client2.ts",
+    "dev:client4": "bun --hot src/client-pset4.ts",
     "start": "bun src/index.ts"
   },
   "devDependencies": {

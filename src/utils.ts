@@ -282,10 +282,10 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     const block = new Block(object, hash);
 
     // 1. Proof of Work Validation
-    if (!block.hasValidPoW()) {
-      socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
-      return false;
-    }
+    // if (!block.hasValidPoW()) {
+    //   socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
+    //   return false;
+    // }
 
     // 2. Find parent Block
     try {
@@ -310,6 +310,13 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     }
 
     const promises = block.txids.map(txid => objectManager.findObject(txid, sendGetObject));
+    // Check Block Created Timestamp
+    if (!await block.validateBlockTimestamp()) {
+      socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
+      return false;
+    }
+    else
+      console.log("TIMESTAMP")
 
     try {
       await Promise.all(promises);
@@ -324,14 +331,9 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     let coinbaseExists = false;
     let fees = 0;
 
-    // Check Block Created Timestamp
-    if (!block.validateBlockTimestamp) {
-      socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
-      return false;
-    }
-
     // find block height
     const blockHeight = await block.getBlockHeight();
+    console.log('HEIGHT', blockHeight);
     for (const [index, txid] of block.txids.entries()) {
       const tx = await knownObjectsDb.get(txid);
       if (tx.type === "transaction" && "inputs" in tx) {

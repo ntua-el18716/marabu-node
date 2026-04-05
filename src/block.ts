@@ -56,9 +56,9 @@ export class Block {
   async findValidParentBlock(socket: Socket): Promise<boolean> {
     if (this.blockid == GENESIS_BLOCK_ID)
       return true;
-    if (this.previd == GENESIS_BLOCK_ID) {
-      return true;
-    }
+    // if (this.previd == GENESIS_BLOCK_ID) {
+    //   return true;
+    // }
 
     const sendGetObject = (objectid: string) => {
       const getObjectMessage = {
@@ -106,11 +106,13 @@ export class Block {
     return -1;
   }
 
-  async validateBlockTimestamp() {
-    const currentTime = Date.now();
+  async validateBlockTimestamp(): Promise<boolean> {
+    if (this.isGenesis())
+      return true;
+    const currentTime = Date.now() / 1000;
     const parentObject = await objectManager.get(this.previd!)
     if (parentObject.type == 'block')
-      if (this.created > currentTime || this.created < parentObject.created)
+      if (this.created >= currentTime || this.created <= parentObject.created)
         return false;
     return true;
   }
