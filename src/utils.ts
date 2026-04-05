@@ -161,6 +161,7 @@ export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<str
   }
   else {
     await knownObjectsDb.del(hash)
+    return;
   }
 
   // else if (object.type === "transaction" && "height" in object) {
