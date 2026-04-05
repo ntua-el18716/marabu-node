@@ -266,15 +266,36 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
 }
 
 const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
+  /**
+   * Block Validation
+   * 1. Validate PoW
+   * 2. Find Parent Block s
+   * 3. Validate txs
+   * @param object - The block object that needs validation.
+   * @param hash - The objectid.
+   * @param socket - The peer who set the object.
+   * @param connectedPeers - The peers currently connected.
+   * @returns True if valid, False if invalid.
+  */
+
   if (object.type === 'block') {
     const block = new Block(object, hash);
 
+    // 1. Proof of Work Validation
     if (!block.hasValidPoW()) {
-      // if (block.hasValidPoW()) {
       socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
       return false;
     }
 
+    // 2. Find parent Block
+    try {
+      await block.findValidParentBlock(socket)
+    } catch {
+      socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
+      return false;
+    }
+
+    // 3. Validate txs
     const sendGetObject = (objectid: string) => {
       const getObjectMessage = {
         type: 'getobject',
@@ -302,6 +323,15 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     // txs are valid if they are in the database
     let coinbaseExists = false;
     let fees = 0;
+
+    // Check Block Created Timestamp
+    if (!block.validateBlockTimestamp) {
+      socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
+      return false;
+    }
+
+    // find block height
+    const blockHeight = await block.getBlockHeight();
     for (const [index, txid] of block.txids.entries()) {
       const tx = await knownObjectsDb.get(txid);
       if (tx.type === "transaction" && "inputs" in tx) {
@@ -316,7 +346,7 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
         }
       }
       else if (tx.type === "transaction" && !("inputs" in tx)) {        // Coinbase Transaction
-        if (index !== 0) {
+        if (index !== 0 || tx.height !== blockHeight) {
           socket.write(canonicalize(errorMessage('INVALID_BLOCK_COINBASE', 'There can only be one Coinbase Transaction at index 0')) + '\n');
           return false;
         }

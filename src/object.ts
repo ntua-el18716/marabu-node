@@ -34,6 +34,7 @@ class ObjectManager {
     return object
   }
 
+
   async put(object: ObjectSchemaUnwrappedType): Promise<string> {
     const objectId = await this.id(object)
     await knownObjectsDb.put(objectId, object)
@@ -108,5 +109,7 @@ class ObjectManager {
     })
   }
 }
+
+export const blockHeights: Map<string, number> = new Map();
 
 export const objectManager = new ObjectManager()

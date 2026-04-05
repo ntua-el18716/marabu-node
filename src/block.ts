@@ -1,6 +1,10 @@
+import { Socket } from 'node:net';
 import { knownObjectsDb } from './db'
+import { blockHeights, objectManager } from './object';
 import { type BlockSchemaType } from './types'
 import { UTXOSet, utxoSets } from './utxo';
+import canonicalize from 'canonicalize';
+
 
 const GENESIS_BLOCK_ID = "00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6";
 
@@ -14,6 +18,7 @@ export class Block {
   miner: string | undefined | null
   note: string | undefined | null
   blockid: string
+  height?: number
 
   constructor(
     data: BlockSchemaType,
@@ -48,5 +53,63 @@ export class Block {
     }
   }
 
+  async findValidParentBlock(socket: Socket): Promise<boolean> {
+    if (this.previd == GENESIS_BLOCK_ID) {
+      return true;
+    }
 
+    const sendGetObject = (objectid: string) => {
+      const getObjectMessage = {
+        type: 'getobject',
+        objectid
+      }
+      const canonicalizedGetObjectMessage = canonicalize(getObjectMessage);
+      // connectedPeers.forEach((value, key) => {
+      //   if (value.peer.validHandshake)
+      //     value.socket.write(canonicalizedGetObjectMessage! + '\n');
+      // })
+      socket.write(canonicalizedGetObjectMessage! + '\n');
+    }
+    try {
+      await objectManager.findObject(this.previd!, sendGetObject)
+    } catch (error) {
+      throw error;
+    }
+    return true;
+  }
+
+  async getBlockHeight(): Promise<number> {
+    // If it's the Genesis block
+    if (this.blockid == GENESIS_BLOCK_ID) {
+      this.height = 0
+      blockHeights.set(GENESIS_BLOCK_ID, 0);
+      return this.height;
+    }
+
+    // If parent block's height is known
+    const parentHeight: number | undefined = blockHeights.get(this.previd!);
+    if (parentHeight != undefined)
+      return 1 + parentHeight;
+
+    // If parent's height is unknown
+    else if (await objectManager.exists(this.previd!)) {
+      const parentObject = await objectManager.get(this.previd!);
+      if (parentObject.type == 'block') {
+        const parentBlock = new Block(parentObject, this.previd!);
+        this.height = 1 + await parentBlock.getBlockHeight()
+        blockHeights.set(this.blockid, this.height)
+        return this.height;
+      }
+    }
+    return -1;
+  }
+
+  async validateBlockTimestamp() {
+    const currentTime = Date.now();
+    const parentObject = await objectManager.get(this.previd!)
+    if (parentObject.type == 'block')
+      if (this.created > currentTime || this.created < parentObject.created)
+        return false;
+    return true;
+  }
 }
