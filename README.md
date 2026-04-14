@@ -19,11 +19,17 @@ Blockchain Foundations is a graduate course taught at NTUA (Spring 2026) and foc
 
 ### PSET2 – Object Exchange & Transaction Validation
 
-PSET2 – Persistent Storage
-
 - Integrated LevelDB for persistent storage of objects(transcactions, blocks)
 - Implemented object validation according to the Marabu protocol rules
 - Enabled peers to request and exchange transactions and blocks
+
+### PSET3 – Block Validation & Maintaining UTXO Sets
+
+- Implemented block validation taking into account the proof of work, the parent block, and its transactions
+- Implemented coinbase transaction validation (no inputs, one output, valid height, law of conservation)
+- Computation of a UTXO set for each block, by coping the parent's UTXO set and applying the transactions of the block.
+- Enabled peers to request and exchange transactions and blocks
+
 
 ## Run the project
 
