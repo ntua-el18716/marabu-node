@@ -331,10 +331,10 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     const block = new Block(object, hash);
 
     // 1. Proof of Work Validation
-    // if (!block.hasValidPoW()) {
-    //   socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
-    //   return false;
-    // }
+    if (!block.hasValidPoW()) {
+      socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
+      return false;
+    }
 
     // 2. Find parent Block
     try {
