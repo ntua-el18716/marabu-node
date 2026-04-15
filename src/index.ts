@@ -1,11 +1,7 @@
-import { createServer } from 'net'
-import { Socket } from 'net';
+import { createServer, Socket } from 'net'
 import { loadPeers, savePeers } from "./peerStore";
 import { handleConnection } from './utils';
 import { Peer } from './peer';
-import { ObjectItem } from './types';
-import { blake2s } from "hash-wasm";
-import canonicalize from 'canonicalize';
 
 const PORT = 18018;
 
@@ -21,26 +17,6 @@ if (knownPeers.size === 0) {
 }
 
 let connectedPeers: Map<string, { socket: Socket, peer: Peer }> = new Map();
-const testObject: ObjectItem = {
-  type: "block",
-  T: "00000000abc00000000000000000000000000000000000000000000000000000",
-  created: 1671148800,
-  miner: "Test Miner",
-  nonce: "15551b5116783ace79cf19d95cca707a94f48e4cc69f3db32f41081dab3e6641",
-  note: "Test block",
-  previd: null,
-  txids: []
-};
-const run = async () => {
-  const canonical = canonicalize(testObject)!;
-  const hash = await blake2s(canonical);
-
-  // await knownObjectsDb.put(hash, testObject);
-
-  console.log("Inserted object with hash:", hash);
-};
-
-await run();
 
 const client = new Socket()
 // load peers

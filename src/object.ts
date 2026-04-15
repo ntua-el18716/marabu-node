@@ -23,7 +23,7 @@ class ObjectManager {
   }
 
   async exists(id: string): Promise<boolean> {
-    return knownObjectsDb.has(id)
+    return await knownObjectsDb.has(id)
   }
 
   async get(id: string): Promise<ObjectSchemaUnwrappedType> {
@@ -111,5 +111,10 @@ class ObjectManager {
 }
 
 export const blockHeights: Map<string, number> = new Map();
+
+export let chainTip: { blockid: string, height: number } = {
+  blockid: '',
+  height: -1
+}
 
 export const objectManager = new ObjectManager()

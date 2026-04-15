@@ -54,11 +54,11 @@ export class Block {
   }
 
   async findValidParentBlock(socket: Socket): Promise<boolean> {
-    if (this.blockid == GENESIS_BLOCK_ID)
-      return true;
-    // if (this.previd == GENESIS_BLOCK_ID) {
-    //   return true;
-    // }
+    if (this.previd == null) {
+      if (this.blockid == GENESIS_BLOCK_ID)
+        return true;
+      return false;
+    }
 
     const sendGetObject = (objectid: string) => {
       const getObjectMessage = {

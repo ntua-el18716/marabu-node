@@ -10,9 +10,8 @@ import type { ObjectItem, ObjectSchemaType, TxInputSchemaType, TxOutputSchemaTyp
 import { error } from "console";
 import * as forge from 'node-forge';
 import { Block } from "./block";
-import { objectManager } from './object'
+import { blockHeights, chainTip, objectManager } from './object'
 import { utxoSets } from "./utxo";
-
 
 var ed25519 = forge.pki.ed25519;
 
@@ -82,13 +81,17 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
           socket.end();
           return;
         }
-        else if (!peer.validHandshake && message.type == "hello")
-          peer.validHandshake = true
+        else if (!peer.validHandshake && message.type == "hello") {
+          peer.validHandshake = true;
+          // sendGetChainTip(socket, connectedPeers);
+        }
         if (message.type == "peers") {
           message.peers.forEach(addr =>
             knownPeers.add(addr)
           );
           await savePeers(knownPeers)
+
+          // sendGetChainTip(socket, connectedPeers);
         }
         else if (message.type == "getpeers") {
           let peersMessage = {
@@ -97,12 +100,24 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
           }
           socket.write(canonicalize(peersMessage) + '\n')
         }
+        else if (message.type == "getchaintip") {
+          let chainTipMessage = {
+            type: "chaintip",
+            blockid: chainTip.blockid
+          }
+          if (chainTip.blockid)
+            socket.write(canonicalize(chainTipMessage) + '\n')
+        }
         else if (message.type == "getobject") {
           if (message.objectid)
             await handleGetObject(message.objectid, socket);
         }
+        else if (message.type == "chaintip") {
+          if (message.blockid)
+            handleChainTip(message.blockid, socket, connectedPeers);
+        }
         else if (message.type == "ihaveobject") {
-          await handleIHaveObject(message.objectid, socket);
+          handleIHaveObject(message.objectid, socket);
         }
         else if (message.type == "object") {
           handleObject(message.object, knownObjectsDb, socket, connectedPeers)
@@ -136,7 +151,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
   })
 }
 
-export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, ObjectItem>, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
+const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, ObjectItem>, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
   let canonicalizedObject = canonicalize(object);
   let hash = await blake2s(canonicalizedObject!);
   console.log("received object with hash", hash);
@@ -157,13 +172,19 @@ export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<str
   if (isValid) {
     // await knownObjectsDb.put(hash, object);
     await objectManager.put(object);
-    console.log("!! Object stored successfully");
+    if (object.type == 'block') {
+      const blockHeight = blockHeights.get(hash);
+      console.log("checkpoint2", blockHeight)
+      if (blockHeight !== undefined && blockHeight > chainTip.height) {
+        chainTip.blockid = hash;
+        chainTip.height = blockHeight;
+      }
+    }
   }
   else {
     await knownObjectsDb.del(hash)
     return;
   }
-
   // else if (object.type === "transaction" && "height" in object) {
   //   await validateCoinbaseTx;
   // }
@@ -173,6 +194,7 @@ export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<str
     objectid: hash
   }
   const canonicalizedIHaveObjectMessage = canonicalize(iHaveObjectMessage);
+  socket.write(canonicalizedIHaveObjectMessage! + '\n');
   // Broadcast to all connected peers
   connectedPeers.forEach((value, key) => {
     if (value.peer.validHandshake && socket !== value.socket)
@@ -180,8 +202,33 @@ export const handleObject = async (object: ObjectItem, knownObjectsDb: Level<str
   })
 }
 
+const sendGetChainTip = async (socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
+  let getChainTipMessage = {
+    type: "getchaintip"
+  }
+  const canonicalizedGetChainTipMessage = canonicalize(getChainTipMessage)
+  connectedPeers.forEach((value, key) => {
+    if (value.peer.validHandshake && socket !== value.socket)
+      value.socket.write(canonicalizedGetChainTipMessage! + '\n');
+  })
+  socket.write(canonicalize(getChainTipMessage) + '\n')
 
-export const handleGetObject = async (hash: string, socket: Socket) => {
+}
+
+const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
+  if (await objectManager.exists(hash)) {
+    await validateBlock(await objectManager.get(hash), hash, connectedPeers, socket)
+  }
+  else {
+    const getObjectMessage = {
+      type: "getobject",
+      objectid: hash
+    }
+    socket.write(canonicalize(getObjectMessage) + '\n')
+  }
+}
+
+const handleGetObject = async (hash: string, socket: Socket) => {
   const obj = await knownObjectsDb.get(hash);
   if (obj !== undefined) {
     const objectMessage = {
@@ -190,10 +237,11 @@ export const handleGetObject = async (hash: string, socket: Socket) => {
     }
     socket.write(canonicalize(objectMessage) + '\n')
   }
+  console.log('couldnt find the object dude:', hash)
   return
 }
 
-export const handleIHaveObject = async (hash: string, socket: Socket) => {
+const handleIHaveObject = async (hash: string, socket: Socket) => {
   const obj = await knownObjectsDb.get(hash);
   if (obj !== undefined) {
     await knownObjectsDb.put(hash, obj);
@@ -206,6 +254,7 @@ export const handleIHaveObject = async (hash: string, socket: Socket) => {
   }
   socket.write(canonicalize(getObjectMessage) + '\n')
 }
+
 const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
   if (object.type === "transaction" && "inputs" in object) {
     let tx_without_sig = structuredClone(object);
@@ -282,10 +331,10 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     const block = new Block(object, hash);
 
     // 1. Proof of Work Validation
-    if (!block.hasValidPoW()) {
-      socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
-      return false;
-    }
+    // if (!block.hasValidPoW()) {
+    //   socket.write(canonicalize(errorMessage('INVALID_BLOCK_POW', 'Proof of work equation violated')) + '\n');
+    //   return false;
+    // }
 
     // 2. Find parent Block
     try {
@@ -296,7 +345,8 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     }
 
     // 3. Validate txs
-    const sendGetObject = (objectid: string) => {
+    const sendGetObject = async (objectid: string) => {
+
       const getObjectMessage = {
         type: 'getobject',
         objectid
@@ -311,12 +361,10 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
 
     const promises = block.txids.map(txid => objectManager.findObject(txid, sendGetObject));
     // Check Block Created Timestamp
-    if (!await block.validateBlockTimestamp()) {
-      socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
-      return false;
-    }
-    else
-      console.log("TIMESTAMP")
+    // if (!await block.validateBlockTimestamp()) {
+    //   socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
+    //   return false;
+    // }
 
     try {
       await Promise.all(promises);
@@ -369,7 +417,6 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
   }
   return true;
 }
-
 
 const validateCoinbaseTx = async (txid: string, fees: number) => {
   const coinbaseTx = await knownObjectsDb.get(txid);

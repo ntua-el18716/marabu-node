@@ -12,7 +12,7 @@ const printDb = async () => {
   await knownObjectsDb.del("d38db64554dcb26d5246ec7f4ea365b654f1bb1710a9c6615e8053cea11ca547")
   await knownObjectsDb.del("0308131405b190db3c94052b9b7185a62538010c8e5298cb104e31edc5a68877")
   // Genesis
-  await knownObjectsDb.del("00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6")
+  // await knownObjectsDb.del("00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6")
 
 
   for await (const [key, value] of knownObjectsDb.iterator()) {

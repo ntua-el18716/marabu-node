@@ -3,8 +3,8 @@ import { blake2s } from "hash-wasm";
 import { Socket } from "net";
 import * as forge from 'node-forge';
 
-// const SERVER_HOST = "127.0.0.1";
-const SERVER_HOST = '95.179.149.49'
+const SERVER_HOST = "127.0.0.1";
+// const SERVER_HOST = '95.179.149.49'
 const SERVER_PORT = 18018;
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -280,13 +280,14 @@ async function main() {
 
     // await send(client, getPeersMessage);
 
-    // await send(client, genesisBlockMessage)
-    // await send(client, getObjectMessageFunc('00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6'))
+    await send(client, genesisBlockMessage)
+    await sleep(1000)
+    await send(client, getObjectMessageFunc('00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6'))
 
 
-    // await send(client, blockWithUnknownCoinbaseTxMessage)
-    // await sleep(500)
-    // await send(client, getObjectMessageFunc('000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab'))
+    await send(client, blockWithUnknownCoinbaseTxMessage)
+    await sleep(1000)
+    await send(client, getObjectMessageFunc('000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab'))
 
     // Send valid Block with two dependancies
     // await send(client, blockWithTwoUnknownCoinbaseTxMessage)

@@ -119,6 +119,9 @@ async function main() {
 
     await send(client, helloMessage);
 
+    await send(client, genesisBlockMessage)
+
+
     // Sending block with Genesis as parent - check if I get getobjectid message
     // await send(client, blockWithGenesisAsParentMessage)
 
@@ -128,11 +131,14 @@ async function main() {
 
     // Note: It works only with deactivated PoW validation 
     // Block with invalid timestamp
-    await send(client, blockWithGenesisAsParentAndInvalidTimestampMessage)
+    // await send(client, blockWithGenesisAsParentAndInvalidTimestampMessage)
 
+    // await send(client, getObjectMessageFunc('000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab'))
 
-
-
+    const getChainTipMessage = {
+      type: "getchaintip"
+    }
+    await send(client, getChainTipMessage)
   })
 
 
@@ -159,6 +165,9 @@ async function main() {
         if (message.type == "getobject") {
           if (message.objectid)
             await handleGetObject(message.objectid, client);
+        }
+        else if (message.type == "getchaintip") {
+          await handleGetChainTip(client)
         }
       } catch (error) {
         client.write(canonicalize(errorMessage('INVALID_FORMAT', 'Expected a valid JSON')) + '\n')
@@ -426,6 +435,14 @@ export const handleGetObject = async (hash: string, socket: Socket) => {
     }
   };
 
+
+
+  if (hash === "0119aa64e340457c0915808c660e315181cf0a772bcc3d7c04a8b71ab75b2209") {
+    console.log("Sending Object: 0119aa64e340457c0915808c660e315181cf0a772bcc3d7c04a8b71ab75b2209\n")
+    socket.write(canonicalize(blockWithGenesisAsParentMessage) + '\n')
+    console.log("<<<", blockWithGenesisAsParentMessage);
+  }
+
   if (hash === "00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6") {
     console.log("Sending Object: 00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6\n")
     socket.write(canonicalize(genesisBlockMessage) + '\n')
@@ -503,4 +520,15 @@ export const handleGetObject = async (hash: string, socket: Socket) => {
     console.log("<<<", coinbaseTxObject13);
   }
   return;
+}
+
+export const handleGetChainTip = async (client: Socket) => {
+  let canonicalizedChainTip = canonicalize(blockWithGenesisAsParentMessage);
+  let hash = await blake2s(canonicalizedChainTip!);
+  console.log("BULBASAUR:", hash)
+  let chainTipMessage = {
+    type: "chaintip",
+    blockid: hash
+  }
+  client.write(canonicalize(chainTipMessage) + '\n')
 }
