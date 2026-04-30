@@ -256,6 +256,19 @@ const handleIHaveObject = async (hash: string, socket: Socket) => {
 }
 
 const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
+  /**
+   * Tranaction Validation (non-coinbase)
+   * 1. For each input check that:
+   *    (a) the respective outpoint is in the UTXO set
+   *    (b) Validate the signature
+   * 2. Check that the Conservation Law holds
+   * @param transaction - The transaction that needs validation.
+   * @param hash - The objectid.
+   * @param socket - The peer who set the object.
+   * @param connectedPeers - The peers currently connected.
+   * @returns True if valid, False if invalid.
+  */
+
   if (object.type === "transaction" && "inputs" in object) {
     let tx_without_sig = structuredClone(object);
     tx_without_sig.inputs.forEach(input => {

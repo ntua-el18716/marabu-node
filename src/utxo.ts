@@ -44,4 +44,6 @@ export class UTXOSet {
   }
 }
 
+// export const mempoolUtxo: UTXOSet = new UTXOSet(new Set());
+
 export const utxoSets: Map<string, UTXOSet> = new Map();
