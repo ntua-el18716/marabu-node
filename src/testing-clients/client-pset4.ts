@@ -2,6 +2,7 @@ import canonicalize from "canonicalize";
 import { blake2s } from "hash-wasm";
 import { Socket } from "net";
 import * as forge from 'node-forge';
+import { FirstBlock, FirstBlock1, firstCoinbaseTx, FourthBlock, fourthCoinbaseTx, SecondBlock, SecondBlock1, secondCoinbaseTx, ThirdBlock, ThirdBlock1, thirdCoinbaseTx } from "./block-explorer";
 
 const SERVER_HOST = "127.0.0.1";
 // const SERVER_HOST = '95.179.149.49'
@@ -26,6 +27,7 @@ const getPeersMessage = {
   type: "getpeers",
 };
 
+
 const genesisBlockMessage = {
   object: {
     T: "00000000abc00000000000000000000000000000000000000000000000000000",
@@ -39,6 +41,7 @@ const genesisBlockMessage = {
   },
   type: "object" as const
 }
+
 const getObjectMessageFunc = (objectId: string) => {
   const getObjectMessage = {
     type: "getobject",
@@ -46,6 +49,21 @@ const getObjectMessageFunc = (objectId: string) => {
   };
   return getObjectMessage
 }
+
+const invalidGenesisBlockMessage = {
+  object: {
+    T: "00000000abc00000000000000000000000000000000000000000000000000000",
+    created: 1771243042,
+    miner: "grader",
+    nonce: "b2d7fc1e86240ec17b56c4dcb0d72b191f5f959bc287b661e3d4177222fff309",
+    note: "Incorrect genesis",
+    previd: null,
+    txids: [],
+    type: "block"
+  },
+  type: "object"
+};
+
 const blockWithGenesisAsParentAndInvalidCoinbaseHeightMessage = {
   object: {
     T: "00000000abc00000000000000000000000000000000000000000000000000000",
@@ -92,6 +110,10 @@ const blockWithGenesisAsParentMessage = {
   type: "object" as const
 };
 
+const chainTipMessage = {
+  type: "chaintip",
+  blockid: "000000006bf98949bfe26c22ec66b9a7f72194b5b8191314eaf2911457b97b4c"
+}
 
 async function main() {
   const client = new Socket();
@@ -119,9 +141,11 @@ async function main() {
 
     await send(client, helloMessage);
 
-    await send(client, genesisBlockMessage)
+    // await send(client, genesisBlockMessage)
 
+    // await send(client, invalidGenesisBlockMessage)
 
+    await sleep(1000)
     // Sending block with Genesis as parent - check if I get getobjectid message
     // await send(client, blockWithGenesisAsParentMessage)
 
@@ -135,9 +159,13 @@ async function main() {
 
     // await send(client, getObjectMessageFunc('000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab'))
 
+    await send(client, chainTipMessage);
+
+
     const getChainTipMessage = {
       type: "getchaintip"
     }
+    await sleep(1000)
     await send(client, getChainTipMessage)
   })
 
@@ -435,6 +463,77 @@ export const handleGetObject = async (hash: string, socket: Socket) => {
     }
   };
 
+
+  // FirstBlock
+  if (hash === "0000000096e9a9cb60ef3efe92133656557fad1f929e7bb9300a548d7be30924") {
+    console.log("Sending Object: 0000000096e9a9cb60ef3efe92133656557fad1f929e7bb9300a548d7be30924\n")
+    socket.write(canonicalize(FirstBlock) + '\n')
+    console.log("<<<", FirstBlock);
+  }
+  // SecondBlock
+  if (hash === "0000000061872bb5cba523a6ae523fa658f8db9d0dbb67ada8ad1f0a45c2e3ed") {
+    console.log("Sending Object: 0000000061872bb5cba523a6ae523fa658f8db9d0dbb67ada8ad1f0a45c2e3ed\n")
+    socket.write(canonicalize(SecondBlock) + '\n')
+    console.log("<<<", SecondBlock);
+  }
+  // ThirdBlock
+  if (hash === "00000000264b56f873424ddef63e8a3ee8ecd66daa46c6c84c631e66949bb54a") {
+    console.log("Sending Object: 00000000264b56f873424ddef63e8a3ee8ecd66daa46c6c84c631e66949bb54a\n")
+    socket.write(canonicalize(ThirdBlock) + '\n')
+    console.log("<<<", ThirdBlock);
+  }
+  // FourthBlock
+  if (hash === "000000006bf98949bfe26c22ec66b9a7f72194b5b8191314eaf2911457b97b4c") {
+    console.log("Sending Object: 000000006bf98949bfe26c22ec66b9a7f72194b5b8191314eaf2911457b97b4c\n")
+    socket.write(canonicalize(FourthBlock) + '\n')
+    console.log("<<<", FourthBlock);
+  }
+  // FirstBlock1
+  if (hash === "000000009d4b5985fa97e88dfa566f67f7d63d0fccab59f66e37679719235dfa") {
+    console.log("Sending Object: 000000009d4b5985fa97e88dfa566f67f7d63d0fccab59f66e37679719235dfa\n")
+    socket.write(canonicalize(FirstBlock1) + '\n')
+    console.log("<<<", FirstBlock1);
+  }
+  // SecondBlock1
+  if (hash === "0000000086648a32ff2cfa6c6fb73867deafe07cb7c8b5cdef1847504785beab") {
+    console.log("Sending Object: 0000000086648a32ff2cfa6c6fb73867deafe07cb7c8b5cdef1847504785beab\n")
+    socket.write(canonicalize(SecondBlock1) + '\n')
+    console.log("<<<", SecondBlock1);
+  }
+  // ThirdBlock1
+  if (hash === "00000000619bc467afc9dc0c4d6de3f4462a3c3f1b7e54a96263c4307e4d6923") {
+    console.log("Sending Object: 00000000619bc467afc9dc0c4d6de3f4462a3c3f1b7e54a96263c4307e4d6923\n")
+    socket.write(canonicalize(ThirdBlock1) + '\n')
+    console.log("<<<", ThirdBlock1);
+  }
+
+
+  // TXS
+
+  // First Coinbase Tx
+  if (hash === "f0769c4452aec5979016ca16675e9cff0c602be973a365d4e951df6fb678624a") {
+    console.log("Sending Object: f0769c4452aec5979016ca16675e9cff0c602be973a365d4e951df6fb678624a\n")
+    socket.write(canonicalize(firstCoinbaseTx) + '\n')
+    console.log("<<<", firstCoinbaseTx);
+  }
+  // Second Coinbase Tx
+  if (hash === "e8fe18770e4bc3244b41b1df6fd0eb0afe8add44f85858db7fa596ffbb02d247") {
+    console.log("Sending Object: e8fe18770e4bc3244b41b1df6fd0eb0afe8add44f85858db7fa596ffbb02d247\n")
+    socket.write(canonicalize(secondCoinbaseTx) + '\n')
+    console.log("<<<", secondCoinbaseTx);
+  }
+  // Third Coinbase Tx
+  if (hash === "191dc6de40ae6dc791b7829994029b457cb3880b835b37c4fe4507aff9c5c93b") {
+    console.log("Sending Object: 191dc6de40ae6dc791b7829994029b457cb3880b835b37c4fe4507aff9c5c93b\n")
+    socket.write(canonicalize(thirdCoinbaseTx) + '\n')
+    console.log("<<<", thirdCoinbaseTx);
+  }
+  // Fourth Coinbase Tx
+  if (hash === "e9647596fb6f25344a9725f8fe45a86c5797cf36480d61a542e6bb776a384e2f") {
+    console.log("Sending Object: e9647596fb6f25344a9725f8fe45a86c5797cf36480d61a542e6bb776a384e2f\n")
+    socket.write(canonicalize(fourthCoinbaseTx) + '\n')
+    console.log("<<<", fourthCoinbaseTx);
+  }
 
 
   if (hash === "0119aa64e340457c0915808c660e315181cf0a772bcc3d7c04a8b71ab75b2209") {

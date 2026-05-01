@@ -113,6 +113,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
             await handleGetObject(message.objectid, socket);
         }
         else if (message.type == "chaintip") {
+          console.log('metapod')
           if (message.blockid)
             handleChainTip(message.blockid, socket, connectedPeers);
         }
@@ -218,6 +219,13 @@ const sendGetChainTip = async (socket: Socket, connectedPeers: Map<string, { soc
 const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
   if (await objectManager.exists(hash)) {
     await validateBlock(await objectManager.get(hash), hash, connectedPeers, socket)
+
+    const blockHeight = blockHeights.get(hash);
+    console.log("Caterpie: hash:", hash, blockHeight)
+    if (blockHeight !== undefined && blockHeight > chainTip.height) {
+      chainTip.blockid = hash;
+      chainTip.height = blockHeight;
+    }
   }
   else {
     const getObjectMessage = {
@@ -350,11 +358,20 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     }
 
     // 2. Find parent Block
-    try {
-      await block.findValidParentBlock(socket)
-    } catch {
-      socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
-      return false;
+
+    if (!block.previd) {
+      if (!block.isGenesis()) {
+        socket.write(canonicalize(errorMessage('INVALID_GENESIS', 'Invalid Genesis Block')) + '\n');
+        return false;
+      }
+    }
+    else {
+      try {
+        let t = await block.findValidParentBlock(socket)
+      } catch {
+        socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
+        return false;
+      }
     }
 
     // 3. Validate txs
@@ -374,10 +391,10 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
 
     const promises = block.txids.map(txid => objectManager.findObject(txid, sendGetObject));
     // Check Block Created Timestamp
-    // if (!await block.validateBlockTimestamp()) {
-    //   socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
-    //   return false;
-    // }
+    if (!await block.validateBlockTimestamp()) {
+      socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
+      return false;
+    }
 
     try {
       await Promise.all(promises);
@@ -409,8 +426,12 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
         }
       }
       else if (tx.type === "transaction" && !("inputs" in tx)) {        // Coinbase Transaction
-        if (index !== 0 || tx.height !== blockHeight) {
+        if (index != 0) {
           socket.write(canonicalize(errorMessage('INVALID_BLOCK_COINBASE', 'There can only be one Coinbase Transaction at index 0')) + '\n');
+          return false;
+        }
+        if (tx.height !== blockHeight) {
+          socket.write(canonicalize(errorMessage('INVALID_BLOCK_COINBASE', 'Coinbase Transcaction height must match the height of the Block')) + '\n');
           return false;
         }
         coinbaseExists = true;
@@ -427,6 +448,11 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
       }
       utxoSets.get(block.blockid)?.applyCoinbaseTx(block.txids.at(0)!, coinbaseTx.outputs);
     }
+    if (blockHeight !== undefined && blockHeight > chainTip.height) {
+      chainTip.blockid = hash;
+      chainTip.height = blockHeight;
+    }
+
   }
   return true;
 }

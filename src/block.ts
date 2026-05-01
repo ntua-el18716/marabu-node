@@ -36,7 +36,7 @@ export class Block {
   }
 
   isGenesis(): boolean {
-    return this.previd === null;
+    return this.blockid === GENESIS_BLOCK_ID;
   }
   hasValidTarget(requiredT: string): boolean {
     return this.T === requiredT;
@@ -82,7 +82,7 @@ export class Block {
 
   async getBlockHeight(): Promise<number> {
     // If it's the Genesis block
-    if (this.blockid == GENESIS_BLOCK_ID) {
+    if (this.blockid == GENESIS_BLOCK_ID || !this.previd) {
       this.height = 0
       blockHeights.set(GENESIS_BLOCK_ID, 0);
       return this.height;
@@ -107,7 +107,7 @@ export class Block {
   }
 
   async validateBlockTimestamp(): Promise<boolean> {
-    if (this.isGenesis())
+    if (this.isGenesis() || !this.previd)
       return true;
     const currentTime = Date.now() / 1000;
     const parentObject = await objectManager.get(this.previd!)
