@@ -168,17 +168,17 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
   else if (object.type === "transaction") {
     // else if (object.type === "transaction" && "inputs" in object) {
     isValid = await validationTx(object, hash, connectedPeers, socket);
-  }
 
-  // If transaction isn't in the pendingFinds it means it doesnt belong to a block so we need to check its validity in regards to the mempool
-  if (isValid && !objectManager.pendingFinds.has(hash)) {
-    isValid = await validateTx(object, hash, mempool.utxoSet)
-    if (isValid)
-      await objectManager.put(object);
-    else {
-      // If the tx is either coinbase tx or not compatible with the mempool
-      socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Input not found in the UTXO')) + '\n');
-      return;
+    // If transaction isn't in the pendingFinds it means it doesnt belong to a block so we need to check its validity in regards to the mempool
+    if (isValid && !objectManager.pendingFinds.has(hash)) {
+      isValid = await validateTx(object, hash, mempool.utxoSet)
+      if (isValid)
+        await objectManager.put(object);
+      else {
+        // If the tx is either coinbase tx or not compatible with the mempool
+        socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Input not found in the UTXO')) + '\n');
+        return;
+      }
     }
   }
   else if (isValid) {
