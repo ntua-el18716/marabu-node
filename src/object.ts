@@ -108,6 +108,46 @@ class ObjectManager {
       }
     })
   }
+
+
+  async findLatestAncestor(oldChainTip: string, newChainTip: string): Promise<string> {
+    if (oldChainTip === newChainTip)
+      return oldChainTip;
+    const oldChainBlock = await this.get(oldChainTip)
+    const newChainBlock = await this.get(newChainTip)
+
+    if (oldChainBlock.type == "block")
+      oldChainTip = oldChainBlock.previd!;
+    if (newChainBlock.type == "block")
+      newChainTip = newChainBlock.previd!;
+    return await this.findLatestAncestor(oldChainTip, newChainTip)
+  }
+
+  async findLatestAncestorV1(oldChainTip: string, newChainTip: string): Promise<string> {
+    let abandonedChain = new Array<string>;
+    let oldChainTipHeight = blockHeights.get(oldChainTip);
+    let newChainTipHeight = blockHeights.get(newChainTip);
+
+    while (oldChainTipHeight !== newChainTipHeight) {
+      const newChainBlock = await this.get(newChainTip)
+      if (newChainBlock.type == "block")
+        newChainTip = newChainBlock.previd!;
+      newChainTipHeight!--;
+    }
+    while (true) {
+      abandonedChain.push(oldChainTip);
+      const oldChainBlock = await this.get(oldChainTip)
+      const newChainBlock = await this.get(newChainTip)
+
+      if (oldChainBlock.type == "block")
+        oldChainTip = oldChainBlock.previd!;
+      if (newChainBlock.type == "block")
+        newChainTip = newChainBlock.previd!;
+
+      if (oldChainTip === newChainTip)
+        return oldChainTip;
+    }
+  }
 }
 
 export const blockHeights: Map<string, number> = new Map();
@@ -116,5 +156,7 @@ export let chainTip: { blockid: string, height: number } = {
   blockid: '',
   height: -1
 }
+
+export let mempool: Set<string> = new Set();
 
 export const objectManager = new ObjectManager()

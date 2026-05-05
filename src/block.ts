@@ -1,6 +1,6 @@
 import { Socket } from 'node:net';
 import { knownObjectsDb } from './db'
-import { blockHeights, objectManager } from './object';
+import { blockHeights, chainTip, objectManager } from './object';
 import { type BlockSchemaType } from './types'
 import { UTXOSet, utxoSets } from './utxo';
 import canonicalize from 'canonicalize';
@@ -38,11 +38,20 @@ export class Block {
   isGenesis(): boolean {
     return this.blockid === GENESIS_BLOCK_ID;
   }
+
   hasValidTarget(requiredT: string): boolean {
     return this.T === requiredT;
   }
+
   hasValidPoW(): boolean {
     return this.blockid < this.T;
+  }
+
+  hasTx(txId: string): boolean {
+    for (const blockTxId of this.txids)
+      if (txId === blockTxId)
+        return true;
+    return false;
   }
 
   getParentUtxo(): UTXOSet {
@@ -73,7 +82,18 @@ export class Block {
       socket.write(canonicalizedGetObjectMessage! + '\n');
     }
     try {
-      await objectManager.findObject(this.previd!, sendGetObject)
+      const parent = await objectManager.findObject(this.previd!, sendGetObject)
+      if (parent.type == "block")
+        if (parent.created >= this.created) {
+          const errorMessage = (errorName: string, description: string) => {
+            return {
+              type: "error",
+              name: errorName,
+              description: description
+            }
+          }
+          socket.write(canonicalize(errorMessage('INVALID_BLOCK_TIMESTAMP', 'Block Timestamp needs to be greater than the one of its parent and lower than the current time')) + '\n');
+        }
     } catch (error) {
       throw error;
     }

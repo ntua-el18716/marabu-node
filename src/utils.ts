@@ -11,7 +11,8 @@ import { error } from "console";
 import * as forge from 'node-forge';
 import { Block } from "./block";
 import { blockHeights, chainTip, objectManager } from './object'
-import { utxoSets } from "./utxo";
+import { UTXOSet, utxoSets } from "./utxo";
+import { mempool } from "./mempool";
 
 var ed25519 = forge.pki.ed25519;
 
@@ -113,7 +114,6 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
             await handleGetObject(message.objectid, socket);
         }
         else if (message.type == "chaintip") {
-          console.log('metapod')
           if (message.blockid)
             handleChainTip(message.blockid, socket, connectedPeers);
         }
@@ -170,7 +170,18 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
     isValid = await validationTx(object, hash, connectedPeers, socket);
   }
 
-  if (isValid) {
+  // If transaction isn't in the pendingFinds it means it doesnt belong to a block so we need to check its validity in regards to the mempool
+  if (isValid && !objectManager.pendingFinds.has(hash)) {
+    isValid = await validateTx(object, hash, mempool.utxoSet)
+    if (isValid)
+      await objectManager.put(object);
+    else {
+      // If the tx is either coinbase tx or not compatible with the mempool
+      socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Input not found in the UTXO')) + '\n');
+      return;
+    }
+  }
+  else if (isValid) {
     // await knownObjectsDb.put(hash, object);
     await objectManager.put(object);
     if (object.type == 'block') {
@@ -179,6 +190,8 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
       if (blockHeight !== undefined && blockHeight > chainTip.height) {
         chainTip.blockid = hash;
         chainTip.height = blockHeight;
+        // a new block is added to the longest chain or the longest chain reorganised so I need to handle the mempool and its state
+        // handleMempool
       }
     }
   }
@@ -214,6 +227,71 @@ const sendGetChainTip = async (socket: Socket, connectedPeers: Map<string, { soc
   })
   socket.write(canonicalize(getChainTipMessage) + '\n')
 
+}
+
+const handleMempool = async (mempoolUtxoSet: UTXOSet, oldChainTip: string, newChainTipBlock: Block) => {
+  /**
+ * Handling Mempool
+ * 
+ * A) If a Block is added to the Longest Chain
+ *    1. Set the Mempool UTXO Set to the UTXO Set that resulted after adding the block
+ *    2. Check if each tx is compatible with the mempool (non-double-spent) state and if it is apply it
+ *    3. Update the Mempool UTXO Set
+ * 
+ * B) If there is a Chain Reorg
+ *    1. Set the Mempool UTXO Set to the UTXO Set that resulted after adding the block
+ * `  2. Find the latest common ancestor of the new and the old chain
+ *    3. Reconstruct the Mempool by attempting to add the txs of the abandoned chain in order followed by the old mempool      
+ * 
+ * @param mempoolUtxoSet - the mempool state
+ * @param oldChainTip - the Chain Tip before the new block was added
+ * @param newChainTip - the new Chain Tip
+ * @returns
+*/
+
+  // 1. Set the Mempool UTXO Set to the UTXO Set that resulted after adding the block
+  mempoolUtxoSet.applyChainTipUtxoContents();
+
+  if (newChainTipBlock.previd === oldChainTip) {
+    // we don't have reorg
+    for (const txId of mempool.txOrder) {
+      if (newChainTipBlock.hasTx(txId!)) {
+        mempool.removeTx(txId)
+        continue;
+      }
+      const tx = await objectManager.get(txId)
+
+      if (tx.type === "transaction" && "inputs" in tx) {
+        if (await validateTx(tx, txId, mempoolUtxoSet))
+          continue;
+      }
+    }
+  }
+
+  else {
+    // 2. Find the latest common ancestor of the new and the old chain
+    if (newChainTipBlock.previd) {
+
+      const abandonedChain = await objectManager.findLatestAncestor(oldChainTip, newChainTipBlock.previd)
+
+      // 3. Reconstruct the Mempool by attempting to add the txs of the abandoned chain in order followed by the old mempool      
+      for (const abandonedBlock of abandonedChain) {
+        for (const txId of abandonedBlock) {
+          if (newChainTipBlock.hasTx(txId!)) {
+            mempool.removeTx(txId)
+            continue;
+          }
+          const tx = await objectManager.get(txId)
+
+          if (tx.type === "transaction" && "inputs" in tx) {
+            if (await validateTx(tx, txId, mempoolUtxoSet))
+              continue;
+            mempool.removeTx(txId)
+          }
+        }
+      }
+    }
+  }
 }
 
 const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
@@ -267,7 +345,7 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
   /**
    * Tranaction Validation (non-coinbase)
    * 1. For each input check that:
-   *    (a) the respective outpoint is in the UTXO set
+   *    (a) the respective outpoint is in the UTXO set (not implemented here)
    *    (b) Validate the signature
    * 2. Check that the Conservation Law holds
    * @param transaction - The transaction that needs validation.
@@ -335,6 +413,22 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
   } return true;
 }
 
+const validateTx = async (tx: ObjectItem, txid: string, utxoSet: UTXOSet): Promise<boolean> => {
+  // txs are valid if they are in the database
+  if (tx.type === "transaction" && "inputs" in tx) {
+    // fees += await calculateTxFees(tx.inputs, tx.outputs);
+    if (utxoSet?.checkInputsCorrespondToOutpoints(tx.inputs)) {
+      utxoSet.applyTx(txid, tx.inputs, tx.outputs);
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+  // if it's a coinbase tx
+  return false;
+}
+
 const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
   /**
    * Block Validation
@@ -376,7 +470,6 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
 
     // 3. Validate txs
     const sendGetObject = async (objectid: string) => {
-
       const getObjectMessage = {
         type: 'getobject',
         objectid
@@ -412,6 +505,7 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     // find block height
     const blockHeight = await block.getBlockHeight();
     console.log('HEIGHT', blockHeight);
+
     for (const [index, txid] of block.txids.entries()) {
       const tx = await knownObjectsDb.get(txid);
       if (tx.type === "transaction" && "inputs" in tx) {
@@ -449,6 +543,10 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
       utxoSets.get(block.blockid)?.applyCoinbaseTx(block.txids.at(0)!, coinbaseTx.outputs);
     }
     if (blockHeight !== undefined && blockHeight > chainTip.height) {
+      // Either a new block is added to the current chain or we have a chain reorg
+      // If the parent of the Block is our ChainTip then we simple add it and apply the Mempool
+      // If the parent is not the ChainTip we have a chain org so we need to reorganise our Mempool
+
       chainTip.blockid = hash;
       chainTip.height = blockHeight;
     }

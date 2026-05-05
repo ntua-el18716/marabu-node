@@ -1,3 +1,4 @@
+import { chainTip } from "./object";
 import { TxInputSchemaType } from "./types";
 import { TxOutputSchemaType } from "./types";
 
@@ -22,7 +23,6 @@ export class UTXOSet {
     }
   }
   applyCoinbaseTx(txid: string, outputs: TxOutputSchemaType[]) {
-    console.log("outpointsAAA"), utxoSets.get("000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab");
     for (const [index, output] of outputs.entries()) {
       const o = txid + ':' + index;
       this.outpoints.add(o);
@@ -41,6 +41,14 @@ export class UTXOSet {
         return false;
     }
     return true;
+  }
+
+  applyChainTipUtxoContents(): void {
+    const chainTipUtxoSet = utxoSets.get(chainTip.blockid);
+    this.outpoints.clear();
+    if (chainTipUtxoSet?.outpoints)
+      for (const outpoint of chainTipUtxoSet.outpoints)
+        this.outpoints.add(outpoint);
   }
 }
 

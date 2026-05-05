@@ -4,8 +4,8 @@ import { Socket } from "net";
 import * as forge from 'node-forge';
 import { FirstBlock, FirstBlock1, firstCoinbaseTx, FourthBlock, fourthCoinbaseTx, SecondBlock, SecondBlock1, secondCoinbaseTx, ThirdBlock, ThirdBlock1, thirdCoinbaseTx } from "./block-explorer";
 
-const SERVER_HOST = "127.0.0.1";
-// const SERVER_HOST = '95.179.149.49'
+// const SERVER_HOST = "127.0.0.1";
+const SERVER_HOST = '95.179.149.49'
 const SERVER_PORT = 18018;
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -141,7 +141,7 @@ async function main() {
 
     await send(client, helloMessage);
 
-    // await send(client, genesisBlockMessage)
+    await send(client, genesisBlockMessage)
 
     // await send(client, invalidGenesisBlockMessage)
 
@@ -159,7 +159,7 @@ async function main() {
 
     // await send(client, getObjectMessageFunc('000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab'))
 
-    await send(client, chainTipMessage);
+    // await send(client, chainTipMessage);
 
 
     const getChainTipMessage = {
