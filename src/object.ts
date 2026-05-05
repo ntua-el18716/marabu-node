@@ -3,7 +3,7 @@ import { ObjectSchemaUnwrappedType } from './types'
 import { blake2s } from 'hash-wasm'
 import { knownObjectsDb } from './db'
 
-const FIND_TIMEOUT_MS = 5000
+const FIND_TIMEOUT_MS = 15000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 interface PendingWaiter {

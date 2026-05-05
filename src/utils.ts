@@ -367,9 +367,9 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
     }
     else {
       try {
-        let t = await block.findValidParentBlock(socket)
+        await block.findValidParentBlock(socket)
       } catch {
-        socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
+        socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', `Object could not be found (previd: ${block.previd})`)) + '\n');
         return false;
       }
     }
@@ -401,7 +401,7 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
       console.log("Promises were resolved - SUCCESS")
     } catch (error) {
       console.log(`Failed to resolve depedencies ${error}`)
-      socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
+      socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', `Object could not be found: ${error}`)) + '\n');
       return false;
     }
     utxoSets.set(block.blockid, block.getParentUtxo());
