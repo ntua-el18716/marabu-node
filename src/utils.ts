@@ -160,6 +160,9 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
   if (existingObject !== undefined) {
     return
   }
+
+  await objectManager.put(object);
+
   let isValid = false;
 
   if (object.type === 'block') {
@@ -172,7 +175,7 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
 
   if (isValid) {
     // await knownObjectsDb.put(hash, object);
-    await objectManager.put(object);
+    // await objectManager.put(object);
     if (object.type == 'block') {
       const blockHeight = blockHeights.get(hash);
       console.log("checkpoint2", blockHeight)

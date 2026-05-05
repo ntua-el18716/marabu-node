@@ -3,7 +3,7 @@ import { ObjectSchemaUnwrappedType } from './types'
 import { blake2s } from 'hash-wasm'
 import { knownObjectsDb } from './db'
 
-const FIND_TIMEOUT_MS = 8000
+const FIND_TIMEOUT_MS = 5000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 interface PendingWaiter {
@@ -52,6 +52,10 @@ class ObjectManager {
     }
 
     return objectId
+  }
+
+  async delete(objectId: string): Promise<void> {
+    await knownObjectsDb.del(objectId)
   }
 
   async findObject(
