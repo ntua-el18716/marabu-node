@@ -112,7 +112,7 @@ const blockWithGenesisAsParentMessage = {
 
 const chainTipMessage = {
   type: "chaintip",
-  blockid: "000000006bf98949bfe26c22ec66b9a7f72194b5b8191314eaf2911457b97b4c"
+  blockid: "0000000058ddd2e1f3bd634bd3bf8ed8fddc06120f37f18b3374d3e16225b7d7"
 }
 
 async function main() {
@@ -141,7 +141,7 @@ async function main() {
 
     await send(client, helloMessage);
 
-    await send(client, genesisBlockMessage)
+    // await send(client, genesisBlockMessage)
 
     // await send(client, invalidGenesisBlockMessage)
 
@@ -159,7 +159,7 @@ async function main() {
 
     // await send(client, getObjectMessageFunc('000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab'))
 
-    await send(client, chainTipMessage);
+    // await send(client, chainTipMessage);
 
 
     const getChainTipMessage = {
