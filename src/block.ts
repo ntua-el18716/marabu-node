@@ -1,6 +1,6 @@
 import { Socket } from 'node:net';
 import { knownObjectsDb } from './db'
-import { blockHeights, objectManager } from './object';
+import { getBlockHeight, setBlockHeight, objectManager } from './object';
 import { type BlockSchemaType } from './types'
 import { UTXOSet, utxoSets } from './utxo';
 import canonicalize from 'canonicalize';
@@ -84,15 +84,15 @@ export class Block {
     // If it's the Genesis block
     if (this.blockid == GENESIS_BLOCK_ID || !this.previd) {
       this.height = 0
-      blockHeights.set(GENESIS_BLOCK_ID, 0);
+      await setBlockHeight(GENESIS_BLOCK_ID, 0);
       return this.height;
     }
 
     // If parent block's height is known
-    const parentHeight: number | undefined = blockHeights.get(this.previd!);
+    const parentHeight: number | undefined = await getBlockHeight(this.previd!);
     if (parentHeight != undefined) {
       this.height = 1 + parentHeight;
-      blockHeights.set(this.blockid, this.height);
+      await setBlockHeight(this.blockid, this.height);
       return this.height;
     }
 
@@ -102,7 +102,7 @@ export class Block {
       if (parentObject.type == 'block') {
         const parentBlock = new Block(parentObject, this.previd!);
         this.height = 1 + await parentBlock.getBlockHeight()
-        blockHeights.set(this.blockid, this.height)
+        await setBlockHeight(this.blockid, this.height)
         return this.height;
       }
     }

@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize'
 import { ObjectSchemaUnwrappedType } from './types'
 import { blake2s } from 'hash-wasm'
-import { knownObjectsDb } from './db'
+import { knownObjectsDb, blockHeightsDb } from './db'
 
 const FIND_TIMEOUT_MS = 5000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -112,7 +112,17 @@ class ObjectManager {
   }
 }
 
-export const blockHeights: Map<string, number> = new Map();
+export const getBlockHeight = async (blockid: string): Promise<number | undefined> => {
+  try {
+    return await blockHeightsDb.get(blockid)
+  } catch {
+    return undefined
+  }
+}
+
+export const setBlockHeight = async (blockid: string, height: number): Promise<void> => {
+  await blockHeightsDb.put(blockid, height)
+}
 
 export let chainTip: { blockid: string, height: number } = {
   blockid: '00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6',

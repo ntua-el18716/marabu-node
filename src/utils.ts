@@ -10,7 +10,7 @@ import type { ObjectItem, ObjectSchemaType, TxInputSchemaType, TxOutputSchemaTyp
 import { error } from "console";
 import * as forge from 'node-forge';
 import { Block } from "./block";
-import { blockHeights, chainTip, objectManager } from './object'
+import { getBlockHeight, chainTip, objectManager } from './object'
 import { utxoSets } from "./utxo";
 
 var ed25519 = forge.pki.ed25519;
@@ -176,14 +176,6 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
   if (isValid) {
     // await knownObjectsDb.put(hash, object);
     await objectManager.put(object);
-    if (object.type == 'block') {
-      const blockHeight = blockHeights.get(hash);
-      console.log("checkpoint2", blockHeight)
-      if (blockHeight !== undefined && blockHeight > chainTip.height) {
-        chainTip.blockid = hash;
-        chainTip.height = blockHeight;
-      }
-    }
   }
   else {
     await knownObjectsDb.del(hash)
@@ -223,7 +215,7 @@ const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<
   if (await objectManager.exists(hash)) {
     await validateBlock(await objectManager.get(hash), hash, connectedPeers, socket)
 
-    const blockHeight = blockHeights.get(hash);
+    const blockHeight = await getBlockHeight(hash);
     console.log("Caterpie: hash:", hash, blockHeight)
     if (blockHeight !== undefined && blockHeight > chainTip.height) {
       chainTip.blockid = hash;
