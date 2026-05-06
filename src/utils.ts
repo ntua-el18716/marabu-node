@@ -110,7 +110,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
         }
         else if (message.type == "getobject") {
           if (message.objectid)
-            await handleGetObject(message.objectid, socket);
+            handleGetObject(message.objectid, socket);
         }
         else if (message.type == "chaintip") {
           console.log('metapod')
