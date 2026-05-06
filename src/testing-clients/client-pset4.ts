@@ -141,8 +141,9 @@ async function main() {
 
     await send(client, helloMessage);
 
-    await send(client, genesisBlockMessage)
+    // await send(client, genesisBlockMessage)
 
+    await send(client, getObjectMessageFunc("00000000884d8b374c3398745d4a4f6dce42a52cb3a62544b981868a6075ee84"))
     // await send(client, invalidGenesisBlockMessage)
 
     await sleep(1000)

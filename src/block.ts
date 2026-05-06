@@ -90,8 +90,11 @@ export class Block {
 
     // If parent block's height is known
     const parentHeight: number | undefined = blockHeights.get(this.previd!);
-    if (parentHeight != undefined)
-      return 1 + parentHeight;
+    if (parentHeight != undefined) {
+      this.height = 1 + parentHeight;
+      blockHeights.set(this.blockid, this.height);
+      return this.height;
+    }
 
     // If parent's height is unknown
     else if (await objectManager.exists(this.previd!)) {
