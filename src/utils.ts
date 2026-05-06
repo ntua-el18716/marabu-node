@@ -156,10 +156,25 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
   let canonicalizedObject = canonicalize(object);
   let hash = await blake2s(canonicalizedObject!);
   console.log("received object with hash", hash);
-  const existingObject = await knownObjectsDb.get(hash);
-  if (existingObject !== undefined) {
-    return
+
+  // const existingObject = await knownObjectsDb.get(hash);
+  // if (existingObject !== undefined) {
+  //   return
+  // }
+  if (await objectManager.exists(hash)) {
+    if (object.type === "block") {
+      const height = await getBlockHeight(hash);
+
+      if (height === undefined) {
+        await validateBlock(object, hash, connectedPeers, socket);
+      } else if (height > chainTip.height) {
+        chainTip.blockid = hash;
+        chainTip.height = height;
+      }
+    }
+    return;
   }
+
 
   // await objectManager.put(object);
 
