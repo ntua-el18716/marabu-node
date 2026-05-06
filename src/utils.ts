@@ -190,7 +190,13 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
 
   if (isValid) {
     // await knownObjectsDb.put(hash, object);
-    await objectManager.put(object);
+    try {
+      await objectManager.put(object);
+    } catch (err) {
+      console.error('Failed to store object in DB', err);
+      socket.write(canonicalize(errorMessage('DB_PUT_FAILED', 'Failed to store object')) + '\n');
+      return;
+    }
   }
   else {
     await knownObjectsDb.del(hash)
@@ -247,23 +253,36 @@ const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<
 }
 
 const handleGetObject = async (hash: string, socket: Socket) => {
-  const obj = await knownObjectsDb.get(hash);
-  if (obj !== undefined) {
-    const objectMessage = {
-      type: "object",
-      object: obj
+  try {
+    const obj = await knownObjectsDb.get(hash);
+    if (obj !== undefined) {
+      const objectMessage = {
+        type: "object",
+        object: obj
+      }
+      socket.write(canonicalize(objectMessage) + '\n')
+      return
     }
-    socket.write(canonicalize(objectMessage) + '\n')
+  } catch (err) {
+    // not found
   }
   console.log('couldnt find the object dude:', hash)
   return
 }
 
 const handleIHaveObject = async (hash: string, socket: Socket) => {
-  const obj = await knownObjectsDb.get(hash);
-  if (obj !== undefined) {
-    await knownObjectsDb.put(hash, obj);
-    return;
+  try {
+    const obj = await knownObjectsDb.get(hash);
+    if (obj !== undefined) {
+      const objectMessage = {
+        type: "object",
+        object: obj
+      }
+      socket.write(canonicalize(objectMessage) + '\n')
+      return;
+    }
+  } catch (err) {
+    // not found locally
   }
 
   const getObjectMessage = {
