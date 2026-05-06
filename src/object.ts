@@ -41,12 +41,10 @@ class ObjectManager {
 
     const waiters = this.pendingFinds.get(objectId)
     // console.log("PENDING", this.pendingFinds.get(objectId))
-    await sleep(150);
+    // await sleep(150);
     if (waiters) {
       this.pendingFinds.delete(objectId)
       for (const waiter of waiters) {
-        console.log("WAITER", waiter)
-
         waiter.resolve(object)
       }
     }
@@ -117,8 +115,8 @@ class ObjectManager {
 export const blockHeights: Map<string, number> = new Map();
 
 export let chainTip: { blockid: string, height: number } = {
-  blockid: '',
-  height: -1
+  blockid: '00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6',
+  height: 0
 }
 
 export const objectManager = new ObjectManager()

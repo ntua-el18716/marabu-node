@@ -141,7 +141,7 @@ async function main() {
 
     await send(client, helloMessage);
 
-    // await send(client, genesisBlockMessage)
+    await send(client, genesisBlockMessage)
 
     // await send(client, invalidGenesisBlockMessage)
 
