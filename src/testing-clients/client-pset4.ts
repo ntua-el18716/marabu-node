@@ -145,7 +145,7 @@ async function main() {
 
     // await send(client, invalidGenesisBlockMessage)
 
-    await sleep(1000)
+    // await sleep(1000)
     // Sending block with Genesis as parent - check if I get getobjectid message
     // await send(client, blockWithGenesisAsParentMessage)
 
@@ -157,7 +157,7 @@ async function main() {
     // Block with invalid timestamp
     // await send(client, blockWithGenesisAsParentAndInvalidTimestampMessage)
 
-    // await send(client, getObjectMessageFunc('000000001a8a21aa884e5fa85a23a372a521d0ec3d74d2aaece160d306d0d9ab'))
+    await send(client, getObjectMessageFunc('48f29e1ad5b6d615af50b8fbaf2aa21b56d661f6b84e34a6c1215e981f44043f'))
 
     // await send(client, chainTipMessage);
 

@@ -1,8 +1,8 @@
 import { Socket } from 'node:net';
-import { knownObjectsDb } from './db'
+import { blockHeightsDb, knownObjectsDb } from './db'
 import { blockHeights, chainTip, objectManager } from './object';
 import { type BlockSchemaType } from './types'
-import { UTXOSet, utxoSets } from './utxo';
+import { getBlockUtxo, UTXOSet, utxoSets } from './utxo';
 import canonicalize from 'canonicalize';
 
 
@@ -54,12 +54,12 @@ export class Block {
     return false;
   }
 
-  getParentUtxo(): UTXOSet {
-    if (this.previd === GENESIS_BLOCK_ID || !this.previd) {
-      return new UTXOSet(new Set())
-    } else {
-      return new UTXOSet(utxoSets.get(this.previd)!.outpoints)
+  async getParentUtxo(): Promise<UTXOSet> {
+    if (!this.previd || this.previd === GENESIS_BLOCK_ID) {
+      return new UTXOSet(new Set());
     }
+
+    return await getBlockUtxo(this.previd);
   }
 
   async findValidParentBlock(socket: Socket): Promise<boolean> {
@@ -109,17 +109,17 @@ export class Block {
     }
 
     // If parent block's height is known
-    const parentHeight: number | undefined = blockHeights.get(this.previd!);
-    if (parentHeight != undefined)
-      return 1 + parentHeight;
+    if (await objectManager.exists(this.previd)) {
+      const parentObject = await objectManager.get(this.previd);
 
-    // If parent's height is unknown
-    else if (await objectManager.exists(this.previd!)) {
-      const parentObject = await objectManager.get(this.previd!);
-      if (parentObject.type == 'block') {
-        const parentBlock = new Block(parentObject, this.previd!);
-        this.height = 1 + await parentBlock.getBlockHeight()
-        blockHeights.set(this.blockid, this.height)
+      if (parentObject.type === "block") {
+        const parentBlock = new Block(parentObject, this.previd);
+        const h = await parentBlock.getBlockHeight();
+
+        if (h === -1) return -1;
+
+        this.height = h + 1;
+        await saveBlockHeightDb(this.blockid, this.height);
         return this.height;
       }
     }
@@ -136,4 +136,18 @@ export class Block {
         return false;
     return true;
   }
+}
+
+export async function getBlockHeightDb(blockid: string): Promise<number> {
+  const cached = blockHeights.get(blockid);
+  if (cached !== undefined) return cached;
+
+  const height = await blockHeightsDb.get(blockid);
+  blockHeights.set(blockid, height);
+  return height;
+}
+
+export async function saveBlockHeightDb(blockid: string, height: number): Promise<void> {
+  await blockHeightsDb.put(blockid, height);
+  blockHeights.set(blockid, height);
 }

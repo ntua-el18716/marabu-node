@@ -1,9 +1,9 @@
 import canonicalize from 'canonicalize'
 import { ObjectSchemaUnwrappedType } from './types'
 import { blake2s } from 'hash-wasm'
-import { knownObjectsDb } from './db'
+import { knownObjectsDb, blockHeightsDb, blockUtxoSetDb } from './db'
 
-const FIND_TIMEOUT_MS = 5000
+const FIND_TIMEOUT_MS = 100000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 interface PendingWaiter {
@@ -26,6 +26,15 @@ class ObjectManager {
     return await knownObjectsDb.has(id)
   }
 
+  // async get(id: string): Promise<ObjectSchemaUnwrappedType> {
+  //   try {
+  //     const object = await knownObjectsDb.get(id)
+  //     return object
+  //   } catch {
+  //     throw new Error(`Object ${id} not found`)
+  //   }
+  // }
+
   async get(id: string): Promise<ObjectSchemaUnwrappedType> {
     const object = await knownObjectsDb.get(id)
     if (object === undefined) {
@@ -37,15 +46,17 @@ class ObjectManager {
 
   async put(object: ObjectSchemaUnwrappedType): Promise<string> {
     const objectId = await this.id(object)
-    await knownObjectsDb.put(objectId, object)
+    try {
+      await knownObjectsDb.put(objectId, object)
+    } catch { throw new Error('Couldnt add object to db') }
 
     const waiters = this.pendingFinds.get(objectId)
     // console.log("PENDING", this.pendingFinds.get(objectId))
-    await sleep(150);
+    // await sleep(150);
     if (waiters) {
       this.pendingFinds.delete(objectId)
       for (const waiter of waiters) {
-        console.log("WAITER", waiter)
+        // console.log("WAITER", waiter)
 
         waiter.resolve(object)
       }
@@ -113,8 +124,13 @@ class ObjectManager {
   async findLatestAncestor(oldChainTip: string, newChainTip: string): Promise<string> {
     if (oldChainTip === newChainTip)
       return oldChainTip;
-    const oldChainBlock = await this.get(oldChainTip)
-    const newChainBlock = await this.get(newChainTip)
+    let oldChainBlock;
+    let newChainBlock;
+    try {
+
+      oldChainBlock = await this.get(oldChainTip)
+      newChainBlock = await this.get(newChainTip)
+    } catch { throw new Error('No Old chain') }
 
     if (oldChainBlock.type == "block")
       oldChainTip = oldChainBlock.previd!;
@@ -160,3 +176,26 @@ export let chainTip: { blockid: string, height: number } = {
 export let mempool: Set<string> = new Set();
 
 export const objectManager = new ObjectManager()
+
+export async function initializeChainTip(): Promise<void> {
+  try {
+    let maxHeight = -1;
+    let maxBlockId = '';
+
+    for await (const [blockId, height] of blockHeightsDb.iterator()) {
+      if (height > maxHeight) {
+        maxHeight = height;
+        maxBlockId = blockId;
+      }
+    }
+
+    if (maxHeight !== -1) {
+      chainTip.blockid = maxBlockId;
+      chainTip.height = maxHeight;
+      blockHeights.set(maxBlockId, maxHeight);
+      console.log(`Initialized chainTip: blockid=${maxBlockId}, height=${maxHeight}`);
+    }
+  } catch (error) {
+    console.error('Failed to initialize chainTip from database:', error);
+  }
+}

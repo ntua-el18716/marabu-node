@@ -9,9 +9,9 @@ import { knownObjectsDb } from "./db";
 import type { ObjectItem, ObjectSchemaType, TxInputSchemaType, TxOutputSchemaType } from './types'
 import { error } from "console";
 import * as forge from 'node-forge';
-import { Block } from "./block";
+import { Block, getBlockHeightDb } from "./block";
 import { blockHeights, chainTip, objectManager } from './object'
-import { UTXOSet, utxoSets } from "./utxo";
+import { saveBlockUtxo, UTXOSet, utxoSets } from "./utxo";
 import { mempool } from "./mempool";
 
 var ed25519 = forge.pki.ed25519;
@@ -40,7 +40,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
     type: "getpeers"
   }
   socket.write(canonicalize(helloMessage) + '\n')
-  socket.write(canonicalize(getPeersMessage) + '\n')
+  // socket.write(canonicalize(getPeersMessage) + '\n')
 
   let buffer = ''
   socket.on('data', async (data) => {
@@ -74,7 +74,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
       }
 
       try {
-        // console.log(message)
+        console.log(message)
         message = MessageSchema.parse(message);
         if (!peer.validHandshake && message.type != "hello") {
           socket.write(canonicalize(errorMessage('INVALID_HANDSHAKE', 'Handshake was not completed successfully')) + '\n')
@@ -84,15 +84,15 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
         }
         else if (!peer.validHandshake && message.type == "hello") {
           peer.validHandshake = true;
-          // sendGetChainTip(socket, connectedPeers);
+          // console.log(connectedPeers)
+          sendGetChainTip(socket, connectedPeers);
+          sendGetMempool(socket, connectedPeers);
         }
         if (message.type == "peers") {
-          message.peers.forEach(addr =>
-            knownPeers.add(addr)
-          );
+          const allowedPeers = message.peers;
+          // const allowedPeers = filterAllowedPeerAddresses(message.peers);
+          allowedPeers.forEach((addr) => knownPeers.add(addr));
           await savePeers(knownPeers)
-
-          // sendGetChainTip(socket, connectedPeers);
         }
         else if (message.type == "getpeers") {
           let peersMessage = {
@@ -106,6 +106,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
             type: "chaintip",
             blockid: chainTip.blockid
           }
+          console.log("ChainTip height is", chainTip.height)
           if (chainTip.blockid)
             socket.write(canonicalize(chainTipMessage) + '\n')
         }
@@ -115,7 +116,7 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
         }
         else if (message.type == "chaintip") {
           if (message.blockid)
-            handleChainTip(message.blockid, socket, connectedPeers);
+            await handleChainTip(message.blockid, socket, connectedPeers);
         }
         else if (message.type == "ihaveobject") {
           handleIHaveObject(message.objectid, socket);
@@ -123,15 +124,25 @@ export const handleConnection = async (socket: Socket, knownPeers: Set<string>, 
         else if (message.type == "object") {
           handleObject(message.object, knownObjectsDb, socket, connectedPeers)
         }
+        else if (message.type == "mempool") {
+          handleMempoolMessage(message.txids, socket)
+        }
+        else if (message.type == "getmempool") {
+          let mempoolMessage = {
+            type: "mempool",
+            txids: mempool.txOrder
+          }
+          socket.write(canonicalize(mempoolMessage) + '\n')
+        }
       } catch (_) {
         console.error(`Unknown protocol message`, message)
         socket.write(canonicalize(errorMessage('INVALID_FORMAT', 'Received Invalid Protocol Message')) + '\n')
         connectedPeers.delete(connectionId)
-        socket.end()
+        // socket.end()
         return;
       }
 
-      console.log(`[${id}]: Received message`, message)
+      // console.log(`[${id}]: Received message`, message)
     }
 
     if (messages[0] === undefined) {
@@ -156,10 +167,10 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
   let canonicalizedObject = canonicalize(object);
   let hash = await blake2s(canonicalizedObject!);
   console.log("received object with hash", hash);
-  const existingObject = await knownObjectsDb.get(hash);
-  if (existingObject !== undefined) {
-    return
-  }
+
+  if (await objectManager.exists(hash))
+    return;
+
   let isValid = false;
 
   if (object.type === 'block') {
@@ -173,27 +184,34 @@ const handleObject = async (object: ObjectItem, knownObjectsDb: Level<string, Ob
   let isMempoolValid = false;
 
   // If transaction isn't in the pendingFinds it means it doesnt belong to a block so we need to check its validity in regards to the mempool
-  if (isValid && !objectManager.pendingFinds.has(hash)) {
+  if (isValid && object.type !== "block" && !objectManager.pendingFinds.has(hash)) {
     isMempoolValid = await validateTx(object, hash, mempool.utxoSet)
     if (!isMempoolValid) {
       // If the tx is either coinbase tx or not compatible with the mempool
-      socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Input not found in the UTXO')) + '\n');
+      socket.write(canonicalize(errorMessage('INVALID_TX_OUTPOINT', 'Input not suitable for mempool')) + '\n');
       // return;
     }
-  }
-  else if (isValid) {
-    // await knownObjectsDb.put(hash, object);
-    await objectManager.put(object);
-    if (object.type == 'block') {
-      const blockHeight = blockHeights.get(hash);
-      console.log("checkpoint2", blockHeight)
-      if (blockHeight !== undefined && blockHeight > chainTip.height) {
-        chainTip.blockid = hash;
-        chainTip.height = blockHeight;
-        // a new block is added to the longest chain or the longest chain reorganised so I need to handle the mempool and its state
-        // handleMempool
-      }
+    else if (!mempool.txOrder.includes(hash)) {
+      mempool.txOrder.push(hash)
     }
+  }
+  if (isValid) {
+    // await knownObjectsDb.put(hash, object);
+    try {
+
+      await objectManager.put(object);
+      if (object.type == 'block') {
+        const blockHeight = await getBlockHeightDb(hash);
+      }
+    } catch { throw Error("Something went wrong") }
+    // console.log("checkpoint2", blockHeight)
+    // if (blockHeight !== undefined && blockHeight > chainTip.height) {
+    //   chainTip.blockid = hash;
+    //   chainTip.height = blockHeight;
+    // a new block is added to the longest chain or the longest chain reorganised so I need to handle the mempool and its state
+    // handleMempool
+    // }
+
   }
   else {
     await knownObjectsDb.del(hash)
@@ -221,13 +239,56 @@ const sendGetChainTip = async (socket: Socket, connectedPeers: Map<string, { soc
     type: "getchaintip"
   }
   const canonicalizedGetChainTipMessage = canonicalize(getChainTipMessage)
-  connectedPeers.forEach((value, key) => {
-    if (value.peer.validHandshake && socket !== value.socket)
-      value.socket.write(canonicalizedGetChainTipMessage! + '\n');
-  })
+  // connectedPeers.forEach((value, key) => {
+  //   if (value.peer.validHandshake && socket !== value.socket)
+  //     value.socket.write(canonicalizedGetChainTipMessage! + '\n');
+  // })
   socket.write(canonicalize(getChainTipMessage) + '\n')
 
 }
+const sendGetMempool = async (socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
+  let getMempoolMessage = {
+    type: "getmempool"
+  }
+  // const canonicalizedGetMempoolMessage = canonicalize(getMempoolMessage)
+  // connectedPeers.forEach((value, key) => {
+  //   if (value.peer.validHandshake && socket !== value.socket)
+  //     value.socket.write(canonicalizedGetMempoolMessage! + '\n');
+  // })
+  socket.write(canonicalize(getMempoolMessage) + '\n')
+
+}
+
+const handleMempoolMessage = async (txIds: string[], socket: Socket) => {
+  for (const txId of txIds) {
+    if (!(await objectManager.exists(txId))) {
+      const getObjectMessage = {
+        type: "getobject",
+        objectid: txId,
+      };
+
+      socket.write(canonicalize(getObjectMessage) + "\n");
+      continue;
+    }
+
+    const tx = await objectManager.get(txId);
+
+    if (!tx || tx.type !== "transaction" || !("inputs" in tx)) {
+      continue;
+    }
+
+    if (mempool.txOrder.includes(txId)) {
+      continue;
+    }
+
+    const ok = await validateTx(tx, txId, mempool.utxoSet);
+
+    if (ok) {
+      mempool.txOrder.push(txId);
+      console.log("Added tx to mempool from mempool message:", txId);
+    }
+  }
+};
 
 const handleMempool = async (mempoolUtxoSet: UTXOSet, oldChainTip: string, newChainTipBlock: Block) => {
   /**
@@ -250,20 +311,22 @@ const handleMempool = async (mempoolUtxoSet: UTXOSet, oldChainTip: string, newCh
 */
 
   // 1. Set the Mempool UTXO Set to the UTXO Set that resulted after adding the block
+  const oldMempool = [...mempool.txOrder];
   mempoolUtxoSet.applyChainTipUtxoContents();
+  mempool.clear();
 
   if (newChainTipBlock.previd === oldChainTip) {
     // we don't have reorg
-    for (const txId of mempool.txOrder) {
+    for (const txId of oldMempool) {
+      // for (const txId of mempool.txOrder) {
       if (newChainTipBlock.hasTx(txId!)) {
-        mempool.removeTx(txId)
         continue;
       }
       const tx = await objectManager.get(txId)
 
       if (tx.type === "transaction" && "inputs" in tx) {
-        if (await validateTx(tx, txId, mempoolUtxoSet))
-          continue;
+        if (await validateTx(tx, txId, mempoolUtxoSet) && !mempool.txOrder.includes(txId))
+          mempool.txOrder.push(txId)
       }
     }
   }
@@ -271,35 +334,39 @@ const handleMempool = async (mempoolUtxoSet: UTXOSet, oldChainTip: string, newCh
   else {
     // 2. Find the latest common ancestor of the new and the old chain
     if (newChainTipBlock.previd) {
-
       const abandonedChain = await objectManager.findLatestAncestor(oldChainTip, newChainTipBlock.previd)
 
       // 3. Reconstruct the Mempool by attempting to add the txs of the abandoned chain in order followed by the old mempool      
       for (const abandonedBlock of abandonedChain) {
         for (const txId of abandonedBlock) {
-          if (newChainTipBlock.hasTx(txId!)) {
-            mempool.removeTx(txId)
+          if (newChainTipBlock.hasTx(txId!))
             continue;
-          }
           const tx = await objectManager.get(txId)
 
+          if (tx.type !== "transaction" || !("inputs" in tx))
+            continue;
+
           if (tx.type === "transaction" && "inputs" in tx) {
-            if (await validateTx(tx, txId, mempoolUtxoSet))
-              continue;
-            mempool.removeTx(txId)
+            if (await validateTx(tx, txId, mempoolUtxoSet) && !mempool.txOrder.includes(txId))
+              mempool.txOrder.push(txId);
           }
         }
+      }
+      for (const txId of oldMempool) {
+        const tx = await objectManager.get(txId)
+        if (await validateTx(tx, txId, mempoolUtxoSet) && !mempool.txOrder.includes(txId))
+          mempool.txOrder.push(txId);
+
       }
     }
   }
 }
 
-const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
+const handleChainTip2 = async (hash: string, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
   if (await objectManager.exists(hash)) {
     await validateBlock(await objectManager.get(hash), hash, connectedPeers, socket)
 
-    const blockHeight = blockHeights.get(hash);
-    console.log("Caterpie: hash:", hash, blockHeight)
+    const blockHeight = await getBlockHeightDb(hash);
     if (blockHeight !== undefined && blockHeight > chainTip.height) {
       chainTip.blockid = hash;
       chainTip.height = blockHeight;
@@ -310,35 +377,50 @@ const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<
       type: "getobject",
       objectid: hash
     }
-    socket.write(canonicalize(getObjectMessage) + '\n')
+    connectedPeers.forEach((value, key) => {
+      // console.log("getobj from", value)
+      if (value.peer.validHandshake)
+        value.socket.write(getObjectMessage! + '\n');
+    })
+    // socket.write(canonicalize(getObjectMessage) + '\n')
   }
 }
+
+const handleChainTip = async (hash: string, socket: Socket, connectedPeers: Map<string, { socket: Socket, peer: Peer }>) => {
+  if (await objectManager.exists(hash)) {
+    await validateBlock(await objectManager.get(hash), hash, connectedPeers, socket);
+    return;
+  }
+
+
+  socket.write(canonicalize({
+    type: "getobject",
+    objectid: hash,
+  }) + "\n");
+};
 
 const handleGetObject = async (hash: string, socket: Socket) => {
   const obj = await knownObjectsDb.get(hash);
   if (obj !== undefined) {
+    // if (await objectManager.exists(hash)) {
+    const obj = await objectManager.get(hash)
     const objectMessage = {
       type: "object",
       object: obj
     }
     socket.write(canonicalize(objectMessage) + '\n')
+    return
   }
-  console.log('couldnt find the object dude:', hash)
-  return
+  // console.log('couldnt find the object dude:', hash)
 }
 
 const handleIHaveObject = async (hash: string, socket: Socket) => {
-  const obj = await knownObjectsDb.get(hash);
-  if (obj !== undefined) {
-    await knownObjectsDb.put(hash, obj);
-    return;
-  }
+  if (await objectManager.exists(hash)) return;
 
-  const getObjectMessage = {
+  socket.write(canonicalize({
     type: "getobject",
     objectid: hash
-  }
-  socket.write(canonicalize(getObjectMessage) + '\n')
+  }) + '\n');
 }
 
 const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Map<string, { socket: Socket, peer: Peer }>, socket: Socket): Promise<boolean> => {
@@ -413,7 +495,7 @@ const validationTx = async (object: ObjectItem, hash: string, connectedPeers: Ma
   } return true;
 }
 
-const validateTx = async (tx: ObjectItem, txid: string, utxoSet: UTXOSet): Promise<boolean> => {
+export const validateTx = async (tx: ObjectItem, txid: string, utxoSet: UTXOSet): Promise<boolean> => {
   // txs are valid if they are in the database
   if (tx.type === "transaction" && "inputs" in tx) {
     // fees += await calculateTxFees(tx.inputs, tx.outputs);
@@ -463,7 +545,7 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
       try {
         let t = await block.findValidParentBlock(socket)
       } catch {
-        socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
+        socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Parent Block could not be found')) + '\n');
         return false;
       }
     }
@@ -475,10 +557,10 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
         objectid
       }
       const canonicalizedGetObjectMessage = canonicalize(getObjectMessage);
-      // connectedPeers.forEach((value, key) => {
-      //   if (value.peer.validHandshake)
-      //     value.socket.write(canonicalizedGetObjectMessage! + '\n');
-      // })
+      connectedPeers.forEach((value, key) => {
+        if (value.peer.validHandshake)
+          value.socket.write(canonicalizedGetObjectMessage! + '\n');
+      })
       socket.write(canonicalizedGetObjectMessage! + '\n');
     }
 
@@ -491,23 +573,23 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
 
     try {
       await Promise.all(promises);
-      console.log("Promises were resolved - SUCCESS")
+      // console.log("Promises were resolved - SUCCESS")
     } catch (error) {
-      console.log(`Failed to resolve depedencies ${error}`)
-      socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Object could not be found')) + '\n');
+      // console.log(`Failed to resolve depedencies ${error}`)
+      socket.write(canonicalize(errorMessage('UNFINDABLE_OBJECT', 'Txs could not be found')) + '\n');
       return false;
     }
-    utxoSets.set(block.blockid, block.getParentUtxo());
+    utxoSets.set(block.blockid, await block.getParentUtxo());
     // txs are valid if they are in the database
     let coinbaseExists = false;
     let fees = 0;
 
     // find block height
     const blockHeight = await block.getBlockHeight();
-    console.log('HEIGHT', blockHeight);
 
     for (const [index, txid] of block.txids.entries()) {
-      const tx = await knownObjectsDb.get(txid);
+
+      const tx = await objectManager.get(txid);
       if (tx.type === "transaction" && "inputs" in tx) {
         fees += await calculateTxFees(tx.inputs, tx.outputs);
         if (utxoSets.get(block.blockid)?.checkInputsCorrespondToOutpoints(tx.inputs)) {
@@ -542,13 +624,30 @@ const validateBlock = async (object: ObjectItem, hash: string, connectedPeers: M
       }
       utxoSets.get(block.blockid)?.applyCoinbaseTx(block.txids.at(0)!, coinbaseTx.outputs);
     }
-    if (blockHeight !== undefined && blockHeight > chainTip.height) {
+
+    // Store UTXO for block
+    const utxo = utxoSets.get(block.blockid);
+
+    if (!utxo) {
+      throw new Error(`Missing UTXO set for block ${block.blockid}`);
+    }
+    await saveBlockUtxo(block.blockid, utxo)
+
+    if (blockHeight !== -1 && blockHeight > chainTip.height) {
       // Either a new block is added to the current chain or we have a chain reorg
       // If the parent of the Block is our ChainTip then we simple add it and apply the Mempool
       // If the parent is not the ChainTip we have a chain org so we need to reorganise our Mempool
 
+      const oldChainTip = chainTip.blockid;
+
       chainTip.blockid = hash;
       chainTip.height = blockHeight;
+
+      if (oldChainTip && block.previd) {
+        await handleMempool(mempool.utxoSet, oldChainTip, block);
+      } else {
+        mempool.utxoSet.applyChainTipUtxoContents();
+      }
     }
 
   }
@@ -568,7 +667,7 @@ const validateCoinbaseTx = async (txid: string, fees: number) => {
   return "SUCCESS";
 }
 
-const calculateTxFees = async (txInputs: TxInputSchemaType[], txOutputs: TxOutputSchemaType[]) => {
+export const calculateTxFees = async (txInputs: TxInputSchemaType[], txOutputs: TxOutputSchemaType[]) => {
   let inputSum = 0, outputSum = 0;
   for (const input of txInputs) {
     const tx = await knownObjectsDb.get(input.outpoint.txid);

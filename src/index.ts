@@ -2,6 +2,8 @@ import { createServer, Socket } from 'net'
 import { loadPeers, savePeers } from "./peerStore";
 import { handleConnection } from './utils';
 import { Peer } from './peer';
+import { chainTip } from './object';
+import { startMiner } from './miner';
 
 const PORT = 18018;
 
@@ -34,3 +36,16 @@ const server = createServer(async (socket) => handleConnection(socket, knownPeer
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`)
 })
+
+const tryStartMiner = () => {
+  if (!chainTip.blockid || chainTip.height < 0) {
+    console.log("Miner not started: chain tip not ready yet");
+    setTimeout(tryStartMiner, 10_000);
+    return;
+  }
+
+  console.log("Starting miner...");
+  void startMiner(connectedPeers);
+};
+
+setTimeout(tryStartMiner, 30_000);

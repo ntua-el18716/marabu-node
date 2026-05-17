@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { isAllowedPeerAddress } from './peerAddress';
 // Hello
 export const HelloMessageSchema = z.object({
   type: z.literal('hello'),
@@ -36,6 +37,7 @@ export const PeersMessageSchema = z
     type: z.literal("peers"),
     peers: z.array(peerAddr),
   });
+
 
 // GetObject
 export const GetObjectMessageSchema = z.object({

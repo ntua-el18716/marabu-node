@@ -15,6 +15,9 @@ export class Mempool {
       this.txOrder.splice(index, 1);
     }
   }
+  clear() {
+    this.txOrder = [];
+  }
 
 }
 
